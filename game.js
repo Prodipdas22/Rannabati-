@@ -1,4 +1,4 @@
-import * as THREE from 'https://unpkg.com/three@0.166.1/build/three.module.js';
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.166.1/build/three.module.js';
 
 const root = document.querySelector('#game');
 const statusEl = document.querySelector('#status');
