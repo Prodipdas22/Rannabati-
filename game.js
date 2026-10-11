@@ -193,20 +193,29 @@ document.querySelector('#homeBtn').onclick=()=>performAction('home');
 document.querySelector('#sleepBtn').onclick=()=>performAction('sleep');
 document.querySelector('#waveBtn').onclick=()=>performAction('wave');
 
+function safeGet(key){try{return localStorage.getItem(key)||'';}catch{return '';}}
+function safeSet(key,value){try{localStorage.setItem(key,value);}catch{}}
+
 function connectServer(){
  const url=document.querySelector('#serverUrl').value.trim().replace(/\/$/,'');
  if(!url){showToast('Enter your deployed server URL first.');return;}
  if(!window.io){setStatus('Socket.IO client unavailable');roomInfo.textContent='The multiplayer library could not load from the available CDNs. Offline village play should still work. Try another network or disable content blockers.';showToast('Multiplayer library unavailable');return;}
  try { localStorage.setItem('rannabatiServerUrl', url); } catch {}
  if(socket) socket.disconnect();
- socket=io(url,{transports:['websocket','polling'],timeout:12000,reconnection:true,reconnectionAttempts:3});
+ socket=io(url,{transports:['websocket','polling'],timeout:15000,reconnection:true,reconnectionAttempts:Infinity,reconnectionDelay:1000,reconnectionDelayMax:8000,randomizationFactor:0.35});
  setStatus('Connecting to multiplayer server…');
- socket.on('connect',()=>{setStatus('Server connected · create or join a room');roomInfo.textContent="Connected. Create a room or enter your friend\'s code."; if(inviteRoomCode){const code=inviteRoomCode;inviteRoomCode='';document.querySelector('#roomCode').value=code;roomInfo.textContent='Joining invitation room '+code+'…';socket.emit('joinRoom',code);}});
- socket.on('connect_error',()=>{setStatus('Multiplayer server unreachable');roomInfo.textContent='Socket.IO loaded, but the server did not connect. Check the server URL, Render service status, and server CORS settings.';});
- socket.on('disconnect',()=>{setStatus('Disconnected from server');isMultiplayer=false;});
- socket.on('roomCreated',({room,players})=>{currentRoom=room;isMultiplayer=true;document.querySelector('#roomCode').value=room;showRoomShare(room);setStatus('Multiplayer · room '+room);showToast('Room created: '+room);syncOtherPlayers(players||[]);});
- socket.on('roomJoined',({room,players})=>{currentRoom=room;isMultiplayer=true;document.querySelector('#roomCode').value=room;showRoomShare(room);setStatus('Multiplayer · room '+room);showToast('Joined village!');syncOtherPlayers(players||[]);});
- socket.on('roomError',msg=>showToast(typeof msg==='string'?msg:'Room error'));
+ socket.on('connect',()=>{
+   setStatus('Connected · syncing village…');
+   const desiredRoom=inviteRoomCode || currentRoom || safeGet('rannabatiRoomCode');
+   if(desiredRoom){inviteRoomCode='';document.querySelector('#roomCode').value=desiredRoom;roomInfo.textContent='Rejoining village '+desiredRoom+'…';socket.emit('joinRoom',desiredRoom);}
+   else roomInfo.textContent="Connected. Create a room or enter your friend's code.";
+ });
+ socket.on('connect_error',err=>{setStatus('Retrying multiplayer connection…');roomInfo.textContent='Connection failed ('+(err&&err.message?err.message:'network error')+'). The game will keep retrying. Check your Render URL and internet connection.';});
+ socket.on('reconnect_attempt',()=>setStatus('Reconnecting to multiplayer server…'));
+ socket.on('disconnect',reason=>{setStatus('Disconnected · reconnecting…');isMultiplayer=false;roomInfo.textContent='Connection lost. Reconnecting automatically…';});
+ socket.on('roomCreated',({room,players})=>{currentRoom=room;isMultiplayer=true;safeSet('rannabatiRoomCode',room);document.querySelector('#roomCode').value=room;showRoomShare(room);setStatus('Multiplayer · room '+room);showToast('Room created: '+room);syncOtherPlayers(players||[]);sendPosition(true);});
+ socket.on('roomJoined',({room,players})=>{currentRoom=room;isMultiplayer=true;safeSet('rannabatiRoomCode',room);document.querySelector('#roomCode').value=room;showRoomShare(room);setStatus('Multiplayer · room '+room);roomInfo.textContent='Joined room '+room+'. Player positions are syncing.';showToast('Joined village!');syncOtherPlayers(players||[]);sendPosition(true);});
+ socket.on('roomError',msg=>{setStatus('Multiplayer room error');roomInfo.textContent=typeof msg==='string'?msg:'Could not join this room.';showToast(typeof msg==='string'?msg:'Room error');});
  socket.on('playerJoined',p=>{if(p.id!==socket.id)addOtherPlayer(p);roomInfo.textContent='Your friend joined the village!';});
  socket.on('playerLeft',id=>{if(otherPlayers.has(id)){scene.remove(otherPlayers.get(id).mesh);otherPlayers.delete(id);}});
  socket.on('playerMoved',p=>updateOtherPlayer(p));
@@ -222,20 +231,37 @@ document.querySelector('#joinRoom').onclick=()=>{if(!socket||!socket.connected){
 if(inviteRoomCode && serverInput.value.trim()) { setStatus('Invitation link detected · connecting…'); connectServer(); }
 
 function addOtherPlayer(p){
+ if(!p||!p.id||p.id===socket?.id)return;
  if(otherPlayers.has(p.id))return;
- const mesh=makePlayer(0xc34f54,'Friend'); mesh.position.set(p.x||2,0,p.z||2);
- otherPlayers.set(p.id,{mesh});
+ const mesh=makePlayer(0xc34f54,'Friend');
+ const x=Number.isFinite(Number(p.x))?Number(p.x):2, z=Number.isFinite(Number(p.z))?Number(p.z):2;
+ mesh.position.set(x,0,z);
+ otherPlayers.set(p.id,{mesh,targetX:x,targetZ:z,targetRotation:Number(p.rotation)||0,lastSeen:performance.now()});
 }
-function syncOtherPlayers(players){players.forEach(p=>{if(p.id!==socket?.id)addOtherPlayer(p);});}
+function syncOtherPlayers(players){
+ const present=new Set();
+ players.forEach(p=>{if(p.id!==socket?.id){present.add(p.id);updateOtherPlayer(p);}});
+ for(const [id,op] of otherPlayers){if(!present.has(id)){scene.remove(op.mesh);otherPlayers.delete(id);}}
+}
 function updateOtherPlayer(p){
- if(p.id===socket?.id)return;
+ if(!p||p.id===socket?.id||!Number.isFinite(Number(p.x))||!Number.isFinite(Number(p.z)))return;
  if(!otherPlayers.has(p.id))addOtherPlayer(p);
- const op=otherPlayers.get(p.id); op.mesh.position.set(p.x,0,p.z); op.mesh.rotation.y=p.rotation||0;
+ const op=otherPlayers.get(p.id); if(!op)return;
+ op.targetX=THREE.MathUtils.clamp(Number(p.x),-31,31); op.targetZ=THREE.MathUtils.clamp(Number(p.z),-31,31); op.targetRotation=Number(p.rotation)||0; op.lastSeen=performance.now();
 }
 function sendPosition(force=false){
  if(!socket||!socket.connected||!currentRoom)return;
- const now=performance.now(); if(!force&&now-lastEmit<80)return; lastEmit=now;
- socket.emit('move',{room:currentRoom,x:localPlayer.position.x,z:localPlayer.position.z,rotation:localPlayer.rotation.y});
+ const now=performance.now(); if(!force&&now-lastEmit<100)return; lastEmit=now;
+ socket.emit('move',{room:currentRoom,x:localPlayer.position.x,z:localPlayer.position.z,rotation:localPlayer.rotation.y,ts:Math.round(now)});
+}
+function interpolateRemotePlayers(dt){
+ const blend=1-Math.exp(-Math.min(dt,.05)*12);
+ for(const [id,op] of otherPlayers){
+   op.mesh.position.x=THREE.MathUtils.lerp(op.mesh.position.x,op.targetX,blend);
+   op.mesh.position.z=THREE.MathUtils.lerp(op.mesh.position.z,op.targetZ,blend);
+   let delta=((op.targetRotation-op.mesh.rotation.y+Math.PI*3)%(Math.PI*2))-Math.PI;
+   op.mesh.rotation.y+=delta*blend;
+ }
 }
 function handleRemoteAction(p){
  if(!p||!p.action)return;
@@ -264,6 +290,7 @@ const clock=new THREE.Clock();
 function animate(){
  requestAnimationFrame(animate);
  const dt=Math.min(clock.getDelta(),.05);
+ interpolateRemotePlayers(dt);
  const now=performance.now();
  if(now-lastNeedTick>18000){const ticks=Math.floor((now-lastNeedTick)/18000);lastNeedTick+=ticks*18000;needs.hunger=Math.max(0,needs.hunger-ticks*1.2);needs.thirst=Math.max(0,needs.thirst-ticks*1.8);needs.energy=Math.max(0,needs.energy-ticks*.65);}
  if(now-lastNeedUi>700){lastNeedUi=now;updateNeeds();}
