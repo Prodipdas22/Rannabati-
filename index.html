@@ -68,7 +68,10 @@
 
   <script>
   (function () {
+    // Prefer a copy hosted by your own GitHub Pages site. Upload socket.io.min.js
+    // beside index.html. If it is missing, try public CDNs as a fallback.
     const sources = [
+      './socket.io.min.js',
       'https://cdn.socket.io/4.8.1/socket.io.min.js',
       'https://cdn.jsdelivr.net/npm/socket.io-client@4.8.1/dist/socket.io.min.js',
       'https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.8.1/socket.io.min.js'

@@ -65,3 +65,16 @@ The server has a simple health check at `/health`.
 - Sleep near the bed to restore energy.
 - A village task chain introduces gathering, cooking, eating, drinking and sleeping goals. Completing tasks awards coins and raises your village level.
 - Existing room links and multiplayer movement/resource syncing remain in place. Needs, meals, coins and quest progress are currently local to each player; they are not saved across refreshes or synchronized between players.
+
+
+## Host Socket.IO client locally (recommended for mobile compatibility)
+
+Some mobile networks or browsers block a third-party CDN. To serve the Socket.IO browser client from your own GitHub Pages site:
+
+1. Download the official Socket.IO 4.8.1 browser client file from: https://cdn.socket.io/4.8.1/socket.io.min.js
+2. Save it with the exact filename `socket.io.min.js`. Make sure it is the JavaScript file, not an HTML error page.
+3. Upload `socket.io.min.js` to the repository root, in the same folder as `index.html`, `style.css`, and `game.js`.
+4. Commit the file and wait for GitHub Pages to redeploy.
+5. Test this URL in a browser: `https://YOUR-USERNAME.github.io/YOUR-REPOSITORY/socket.io.min.js` — it should display JavaScript, not a 404 page.
+
+The updated `index.html` tries `./socket.io.min.js` first and then tries public CDN fallbacks. Hosting the client locally avoids depending on a third-party CDN for loading the Socket.IO browser library. It does **not** replace the multiplayer backend: the Render/Socket.IO server must still be running and its URL must be correct.
