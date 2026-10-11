@@ -133,7 +133,7 @@ function connectServer(){
  if(socket) socket.disconnect();
  socket=io(url,{transports:['websocket','polling'],timeout:8000});
  setStatus('Connecting…');
- socket.on('connect',()=>{setStatus('Server connected · create or join a room');roomInfo.textContent='Connected. Create a room or enter your friend's code.';});
+ socket.on('connect',()=>{setStatus('Server connected · create or join a room');roomInfo.textContent="Connected. Create a room or enter your friend's code.";});
  socket.on('connect_error',()=>{setStatus('Server unavailable');roomInfo.textContent='Could not connect. Check the server URL and make sure the backend is running.';});
  socket.on('disconnect',()=>{setStatus('Disconnected from server');isMultiplayer=false;});
  socket.on('roomCreated',({room,players})=>{currentRoom=room;isMultiplayer=true;document.querySelector('#roomCode').value=room;roomInfo.textContent='Room '+room+' created. Share this code with your friend.';setStatus('Multiplayer · room '+room);showToast('Room created: '+room);syncOtherPlayers(players||[]);});
