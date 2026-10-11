@@ -14,6 +14,8 @@ const PORT = process.env.PORT || 3000;
 const rooms = new Map();
 const MAX_PLAYERS = 2;
 const WORLD_LIMIT = 31;
+// Shared day/night cycle: one complete village day every 8 real minutes.
+function worldClock() { return { epoch: Date.now(), dayLengthMs: 480000 }; }
 
 app.get('/', (_req, res) => res.json({ name: 'Rannabati Village multiplayer server', status: 'ok', rooms: rooms.size }));
 app.get('/health', (_req, res) => res.status(200).json({ status: 'ok', rooms: rooms.size }));
@@ -30,7 +32,7 @@ function publicPlayer(p) { return { id: p.id, x: p.x, z: p.z, rotation: p.rotati
 function roomState(room) {
   const r = rooms.get(room);
   if (!r) return null;
-  return { inventory: { ...r.inventory }, collected: [...r.collected], players: [...r.players.values()].map(publicPlayer) };
+  return { inventory: { ...r.inventory }, collected: [...r.collected], players: [...r.players.values()].map(publicPlayer), worldClock: worldClock() };
 }
 function leaveCurrentRoom(socket) {
   const old = socket.data.room;
@@ -66,6 +68,7 @@ io.on('connection', socket => {
     socket.data.room = room;
     socket.join(room);
     socket.emit('roomCreated', { room, players: [] });
+    socket.emit('worldClock', worldClock());
     emitRoomSnapshot(socket, room);
   });
 
@@ -76,6 +79,7 @@ io.on('connection', socket => {
     if (!r) return socket.emit('roomError', 'Room not found. Ask your friend to create a room again. Rooms reset when the server restarts.');
     if (socket.data.room === room && r.players.has(socket.id)) {
       socket.emit('roomJoined', { room, players: [...r.players.values()].map(publicPlayer) });
+      socket.emit('worldClock', worldClock());
       emitRoomSnapshot(socket, room);
       return;
     }
@@ -86,6 +90,7 @@ io.on('connection', socket => {
     socket.data.room = room;
     socket.join(room);
     socket.emit('roomJoined', { room, players: [...r.players.values()].map(publicPlayer) });
+    socket.emit('worldClock', worldClock());
     socket.to(room).emit('playerJoined', publicPlayer(p));
     io.to(room).emit('state', roomState(room));
   });
@@ -127,4 +132,6 @@ io.on('connection', socket => {
 
   socket.on('disconnect', () => leaveCurrentRoom(socket));
 });
+setInterval(() => { for (const room of rooms.keys()) io.to(room).emit('worldClock', worldClock()); }, 5000);
+
 server.listen(PORT, '0.0.0.0', () => console.log(`Rannabati server listening on ${PORT}`));
