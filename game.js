@@ -69,6 +69,51 @@ function resource(type,x,z,color,emoji){
 }
 resource('wood',-1,7,0x995e2f,'🪵'); resource('wood',5,5,0x995e2f,'🪵'); resource('food',4,-4,0xd85e48,'🥕'); resource('food',7,-2,0xd8b342,'🥕'); resource('water',9,3,0x6b9bba,'💧'); resource('water',-11,5,0x6b9bba,'💧');
 
+// V3C shared farm plots. The server is authoritative for crop state, seeds and coins.
+const farmPlotPositions = [{x:-12,z:8},{x:-9,z:8},{x:-6,z:8},{x:-12,z:11},{x:-9,z:11},{x:-6,z:11}];
+const farmPlotMeshes = farmPlotPositions.map((p,i)=>{
+ const soil=box('farm soil '+(i+1),p.x,.015,p.z,2.25,.12,2.25,mat(0x795033));
+ const border=box('farm border '+(i+1),p.x,.09,p.z,2.35,.08,2.35,mat(0xb99a69));
+ const plantGroup=new THREE.Group(); plantGroup.position.set(p.x,0,p.z); scene.add(plantGroup);
+ return {soil,border,plantGroup};
+});
+let sharedFarm = {coins:20,seeds:3,produce:0,crops:farmPlotPositions.map(()=>({stage:'empty',watered:false,readyAt:0}))};
+function paintFarm(farm){
+ if(!farm||!Array.isArray(farm.crops))return;
+ sharedFarm={...sharedFarm,...farm};
+ farmPlotMeshes.forEach((plot,i)=>{
+  plot.plantGroup.clear();
+  const crop=sharedFarm.crops[i]||{stage:'empty'};
+  if(crop.stage==='seedling'||crop.stage==='growing'||crop.stage==='ready'){
+   const height=crop.stage==='seedling'?.28:(crop.stage==='growing'?.62:.95);
+   const stem=cylinder('crop stem',0,height/2,0,.08,.1,height,mat(0x438345),plot.plantGroup);
+   sphere('crop leaf',-.18,height*.72,0,.2,mat(0x62a64b),plot.plantGroup);
+   sphere('crop leaf',.18,height*.78,.03,.2,mat(0x4b943e),plot.plantGroup);
+   if(crop.stage==='ready') sphere('ripe vegetable',0,height+.08,0,.25,mat(0xe6a63b),plot.plantGroup);
+  }
+ });
+ updateFarmPanel();
+}
+const farmPanel=document.createElement('section');
+farmPanel.id='farmPanel';
+farmPanel.style.cssText='position:fixed;right:10px;top:58px;z-index:30;width:min(220px,48vw);max-height:48vh;overflow:auto;background:rgba(20,35,25,.9);color:#fff;border:1px solid #ffffff30;border-radius:14px;padding:10px;font:12px system-ui;box-shadow:0 5px 18px #0003;';
+farmPanel.innerHTML='<div style="font-weight:800;font-size:14px;margin-bottom:5px">🌱 Shared Farm</div><div id="farmStats" style="line-height:1.6;margin-bottom:7px">20 coins · 3 seeds · 0 crops</div><div id="farmSelected" style="margin-bottom:7px;color:#d9e8c8">Move near a plot to farm</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:5px"><button data-farm="plant">Plant</button><button data-farm="water">Water</button><button data-farm="harvest">Harvest</button><button data-farm="buySeed">Buy seed · 5</button><button data-farm="sellProduce" style="grid-column:1/3">Sell all produce · 10 coins each</button></div><div style="font-size:10px;opacity:.8;margin-top:7px">Plant → water → wait 30 sec → harvest. Stand near a plot.</div>' ;
+document.body.appendChild(farmPanel);
+farmPanel.querySelectorAll('button').forEach(b=>{b.style.cssText='border:0;border-radius:8px;padding:9px 5px;background:#d8e8c6;color:#20351e;font-weight:700;font-size:11px;touch-action:manipulation';b.addEventListener('click',()=>farmAction(b.dataset.farm));});
+function nearestFarmPlot(){let best=-1,d=999;farmPlotPositions.forEach((p,i)=>{const dist=Math.hypot(localPlayer.position.x-p.x,localPlayer.position.z-p.z);if(dist<d){d=dist;best=i;}});return d<=4.2?best:-1;}
+function updateFarmPanel(){
+ const stats=document.querySelector('#farmStats'),selected=document.querySelector('#farmSelected');
+ if(stats)stats.textContent=`${sharedFarm.coins??20} shared coins · ${sharedFarm.seeds??3} seeds · ${sharedFarm.produce??0} harvested`;
+ if(selected){const i=nearestFarmPlot();selected.textContent=i<0?'Move closer to a farm plot':`Plot ${i+1}: ${(sharedFarm.crops?.[i]?.stage||'empty').toUpperCase()}`;}
+}
+function farmAction(action){
+ if(!socket||!socket.connected||!currentRoom){showToast('Join a multiplayer room to use the shared farm.');return;}
+ const index=nearestFarmPlot();
+ if(['plant','water','harvest'].includes(action)&&index<0){showToast('Move closer to one of the farm plots.');return;}
+ socket.emit('farmAction',{room:currentRoom,action,index});
+}
+
+
 function makePlayer(color, name) {
  const g=new THREE.Group();
  cylinder('body',0,1,0,.38,.43,1.0,mat(color),g);
@@ -266,7 +311,9 @@ function connectServer(){
  socket.on('playerMoved',p=>updateOtherPlayer(p));
  socket.on('worldClock',payload=>{ if(payload&&payload.epoch) applyWorldClock(payload.epoch); });
  socket.on('gameAction',payload=>handleRemoteAction(payload));
- socket.on('state',state=>{if(state.inventory){Object.assign(inventory,state.inventory);updateInventory();updateNeeds();} if(state.collected){state.collected.forEach(i=>{if(resources[i])resources[i].group.visible=false;});}});
+ socket.on('state',state=>{if(state.inventory){Object.assign(inventory,state.inventory);updateInventory();updateNeeds();} if(state.collected){state.collected.forEach(i=>{if(resources[i])resources[i].group.visible=false;});} if(state.farm)paintFarm(state.farm);});
+ socket.on('farmState',farm=>paintFarm(farm));
+ socket.on('farmResult',result=>{if(result&&result.farm)paintFarm(result.farm);if(result&&result.message)showToast(result.message);});
 }
 document.querySelector('#saveServer').onclick=connectServer;
 document.querySelector('#shareRoom').onclick=shareRoomWhatsApp;
@@ -354,8 +401,9 @@ function animate(){
  camera.position.z=THREE.MathUtils.lerp(camera.position.z,localPlayer.position.z+12,dt*3);
  camera.lookAt(localPlayer.position.x,0,localPlayer.position.z);
  updateWorldClock(dt);
+ if(Math.floor(now/400)!==Math.floor((now-dt*1000)/400))updateFarmPanel();
  renderer.render(scene,camera);
 }
-updateInventory(); updateNeeds();
+updateInventory(); updateNeeds(); paintFarm(sharedFarm);
 animate();
 window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.6));});
