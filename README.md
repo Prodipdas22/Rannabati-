@@ -49,3 +49,19 @@ The server has a simple health check at `/health`.
 - **Blank screen:** use the published HTTPS URL, check internet access, and reload.
 - **Multiplayer not connecting:** open `https://YOUR-SERVER-URL/health`, confirm it returns `{"status":"ok"}`, and use the exact HTTPS server base URL in the game.
 - **Room not found:** create the room first and make sure the server did not restart.
+
+
+## Updates in this build
+- Room invitation links include the room code and multiplayer server URL. Use **Share on WhatsApp** after creating/joining a room. Invitees are connected and auto-join the room when they open the link.
+- The Play together panel can be collapsed with the − / + button.
+- Socket.IO client loading tries three CDN locations. If all fail, offline play still loads and multiplayer gets a more specific message. A server connection error is reported separately from a missing client library.
+- The server URL is remembered in local storage on the device. Keep the server URL and backend running for both players.
+
+
+## Gameplay upgrade (v2)
+- Survival meters: hunger, thirst and energy slowly decrease while you play. Low hunger/thirst or energy reduces walking speed.
+- Cook food using 1 food + 1 wood, then use **Eat meal** to restore hunger and a little energy.
+- Collect water, then use **Drink** to restore thirst.
+- Sleep near the bed to restore energy.
+- A village task chain introduces gathering, cooking, eating, drinking and sleeping goals. Completing tasks awards coins and raises your village level.
+- Existing room links and multiplayer movement/resource syncing remain in place. Needs, meals, coins and quest progress are currently local to each player; they are not saved across refreshes or synchronized between players.

@@ -41,12 +41,22 @@
     <div class="need"><span>🪵 Wood</span><b id="woodCount">0</b></div>
     <div class="need"><span>🥕 Food</span><b id="foodCount">0</b></div>
     <div class="need"><span>💧 Water</span><b id="waterCount">0</b></div>
-    <div class="hint" id="hint">Walk near a resource and tap Collect.</div>
+    <div class="need"><span>🍲 Meals</span><b id="mealCount">0</b></div>
+    <div class="meter-label"><span>🍚 Hunger</span><b id="hungerValue">100%</b></div>
+    <div class="meter"><div id="hungerBar" class="meter-fill hunger-fill"></div></div>
+    <div class="meter-label"><span>💧 Thirst</span><b id="thirstValue">100%</b></div>
+    <div class="meter"><div id="thirstBar" class="meter-fill thirst-fill"></div></div>
+    <div class="meter-label"><span>⚡ Energy</span><b id="energyValue">100%</b></div>
+    <div class="meter"><div id="energyBar" class="meter-fill energy-fill"></div></div>
+    <div class="quest-box"><b>📜 Village tasks</b><div id="questText">Collect 2 wood, 2 food and 1 water.</div><div class="quest-progress"><div id="questBar"></div></div><small id="levelText">Village level 1 · 0 coins</small></div>
+    <div class="hint" id="hint">Move near resources to collect. Keep hunger, thirst and energy up!</div>
   </section>
 
   <div class="actionbar">
     <button id="collectBtn">Collect</button>
     <button id="cookBtn">🍲 Cook</button>
+    <button id="eatBtn">🥣 Eat meal</button>
+    <button id="drinkBtn">💧 Drink</button>
     <button id="homeBtn">🏡 Go home</button>
     <button id="sleepBtn">🌙 Sleep</button>
     <button id="waveBtn" class="secondary">👋 Wave</button>

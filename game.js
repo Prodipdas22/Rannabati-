@@ -90,6 +90,16 @@ const myId='p'+Math.random().toString(36).slice(2,8);
 const localPlayer=makePlayer(0x386fbd,'You'); localPlayer.position.set(0,0,0);
 const otherPlayers=new Map();
 const inventory={wood:0,food:0,water:0};
+const needs={hunger:100,thirst:100,energy:100};
+let meals=0, coins=0, villageLevel=1, questStage=0, lastNeedTick=performance.now(), lastNeedUi=0;
+const quests=[
+ {text:'Gather 2 wood, 2 food and 1 water.', done:()=>inventory.wood>=2&&inventory.food>=2&&inventory.water>=1},
+ {text:'Cook a fresh meal at the village stove.', done:()=>meals>=1},
+ {text:'Eat a meal to restore your hunger.', done:()=>ateMeal},
+ {text:'Drink water to quench your thirst.', done:()=>drankWater},
+ {text:'Sleep in your bed to finish the day.', done:()=>needs.energy>=90&&sleptToday}
+];
+let sleptToday=false, ateMeal=false, drankWater=false, questRewarded=false;
 let socket=null, currentRoom='', isMultiplayer=false, lastEmit=0, lastAction=0;
 let inviteRoomCode = new URLSearchParams(location.search).get('room')?.trim().toUpperCase() || '';
 const inviteServerUrl = new URLSearchParams(location.search).get('server') || '';
@@ -123,7 +133,24 @@ function copyRoomLink() {
 let joystick={x:0,y:0}, keys={};
 function showToast(msg){ toastEl.textContent=msg; toastEl.classList.add('show'); clearTimeout(showToast.t); showToast.t=setTimeout(()=>toastEl.classList.remove('show'),1900); }
 function setStatus(msg){statusEl.textContent=msg;}
-function updateInventory(){ for(const k of Object.keys(inventory)) document.querySelector('#'+k+'Count').textContent=inventory[k]; }
+function updateInventory(){ for(const k of Object.keys(inventory)) document.querySelector('#'+k+'Count').textContent=inventory[k]; document.querySelector('#mealCount').textContent=meals; }
+function updateNeeds(){
+ for(const k of ['hunger','thirst','energy']){
+  const val=Math.round(needs[k]); document.querySelector('#'+k+'Value').textContent=val+'%';
+  document.querySelector('#'+k+'Bar').style.width=val+'%';
+ }
+ const q=quests[Math.min(questStage,quests.length-1)];
+ document.querySelector('#questText').textContent=questStage>=quests.length?'Village tasks completed! Keep helping your village.':q.text;
+ document.querySelector('#questBar').style.width=(questStage>=quests.length?100:(questStage/quests.length)*100)+'%';
+ document.querySelector('#levelText').textContent='Village level '+villageLevel+' · '+coins+' coins';
+}
+function checkQuest(){
+ if(questStage<quests.length&&quests[questStage].done()&&!questRewarded){
+  questStage++; questRewarded=true; coins+=10*villageLevel; villageLevel++; showToast('🌟 Task complete! +'+(10*(villageLevel-1))+' coins · Village level '+villageLevel);
+  setTimeout(()=>{questRewarded=false;updateNeeds();},500);
+ }
+ updateNeeds();
+}
 function nearestResource(){
  let nearest=null, d=999;
  for(const r of resources){ if(r.group.visible===false)continue; const dist=localPlayer.position.distanceTo(r.group.position); if(dist<2.25&&dist<d){nearest=r;d=dist;} }
@@ -135,15 +162,24 @@ function performAction(action){
  if(action==='collect'){
   const r=nearestResource();
   if(!r){showToast('Move closer to wood, vegetables or water.');return;}
-  r.group.visible=false; inventory[r.type]++; updateInventory(); sendAction('resourceCollected',{type:r.type, index:resources.indexOf(r)}); showToast('Collected '+r.type+'!');
+  r.group.visible=false; inventory[r.type]++; updateInventory(); sendAction('resourceCollected',{type:r.type,index:resources.indexOf(r)});
+  if(r.type==='food') needs.hunger=Math.min(100,needs.hunger+3);
+  showToast('Collected '+r.type+'!'); checkQuest();
  } else if(action==='cook'){
-  if(inventory.food>0&&inventory.wood>0){inventory.food--;inventory.wood--;updateInventory();showToast('🍲 Meal cooked! You both feel at home.');sendAction('cooked');}
+  if(inventory.food>0&&inventory.wood>0){inventory.food--;inventory.wood--;meals++;updateInventory();updateNeeds();showToast('🍲 Meal cooked! Tap Eat meal when hungry.');sendAction('cooked');checkQuest();}
   else showToast('Need 1 food + 1 wood to cook.');
+ } else if(action==='eat'){
+  if(meals>0){meals--;ateMeal=true;needs.hunger=Math.min(100,needs.hunger+42);needs.energy=Math.min(100,needs.energy+8);updateInventory();updateNeeds();showToast('🥣 Delicious! Hunger restored.');checkQuest();}
+  else showToast('Cook a meal first.');
+ } else if(action==='drink'){
+  if(inventory.water>0){inventory.water--;drankWater=true;needs.thirst=Math.min(100,needs.thirst+48);updateInventory();updateNeeds();showToast('💧 Fresh water.');checkQuest();}
+  else showToast('Collect water from a nearby jar first.');
  } else if(action==='home'){
   localPlayer.position.set(-7,0,-1.5); showToast('Back home 🏡'); sendPosition(true);
  } else if(action==='sleep'){
   if(localPlayer.position.distanceTo(new THREE.Vector3(-7,0,-4))>4.5){showToast('Go near your bed to sleep.');return;}
-  localPlayer.rotation.x=-.15; showToast('🌙 Resting… sweet dreams!'); sendAction('sleep');
+  localPlayer.rotation.x=-.15; sleptToday=true; needs.energy=100; needs.hunger=Math.max(0,needs.hunger-5); needs.thirst=Math.max(0,needs.thirst-4); updateNeeds();
+  showToast('🌙 Resting… energy restored!'); sendAction('sleep'); checkQuest();
   setTimeout(()=>{localPlayer.rotation.x=0;showToast('Good morning! 🌤️');},1800);
  } else if(action==='wave'){
   localPlayer.rotation.z=.5; setTimeout(()=>localPlayer.rotation.z=0,500); showToast('👋 You waved hello!'); sendAction('wave');
@@ -151,6 +187,8 @@ function performAction(action){
 }
 document.querySelector('#collectBtn').onclick=()=>performAction('collect');
 document.querySelector('#cookBtn').onclick=()=>performAction('cook');
+document.querySelector('#eatBtn').onclick=()=>performAction('eat');
+document.querySelector('#drinkBtn').onclick=()=>performAction('drink');
 document.querySelector('#homeBtn').onclick=()=>performAction('home');
 document.querySelector('#sleepBtn').onclick=()=>performAction('sleep');
 document.querySelector('#waveBtn').onclick=()=>performAction('wave');
@@ -173,7 +211,7 @@ function connectServer(){
  socket.on('playerLeft',id=>{if(otherPlayers.has(id)){scene.remove(otherPlayers.get(id).mesh);otherPlayers.delete(id);}});
  socket.on('playerMoved',p=>updateOtherPlayer(p));
  socket.on('gameAction',payload=>handleRemoteAction(payload));
- socket.on('state',state=>{if(state.inventory){Object.assign(inventory,state.inventory);updateInventory();} if(state.collected){state.collected.forEach(i=>{if(resources[i])resources[i].group.visible=false;});}});
+ socket.on('state',state=>{if(state.inventory){Object.assign(inventory,state.inventory);updateInventory();updateNeeds();} if(state.collected){state.collected.forEach(i=>{if(resources[i])resources[i].group.visible=false;});}});
 }
 document.querySelector('#saveServer').onclick=connectServer;
 document.querySelector('#shareRoom').onclick=shareRoomWhatsApp;
@@ -226,11 +264,14 @@ const clock=new THREE.Clock();
 function animate(){
  requestAnimationFrame(animate);
  const dt=Math.min(clock.getDelta(),.05);
+ const now=performance.now();
+ if(now-lastNeedTick>18000){const ticks=Math.floor((now-lastNeedTick)/18000);lastNeedTick+=ticks*18000;needs.hunger=Math.max(0,needs.hunger-ticks*1.2);needs.thirst=Math.max(0,needs.thirst-ticks*1.8);needs.energy=Math.max(0,needs.energy-ticks*.65);}
+ if(now-lastNeedUi>700){lastNeedUi=now;updateNeeds();}
  const forward=(keys.w||keys.arrowup?1:0)-(keys.s||keys.arrowdown?1:0)-joystick.y;
  const right=(keys.d||keys.arrowright?1:0)-(keys.a||keys.arrowleft?1:0)+joystick.x;
  const v=new THREE.Vector3(right,0,forward); if(v.length()>1)v.normalize();
  if(v.lengthSq()>0.001){
-   const speed=4.2*dt; localPlayer.position.x+=v.x*speed;localPlayer.position.z-=v.z*speed;
+   const needsFactor=(needs.hunger<15||needs.thirst<15)?0.62:(needs.energy<15?0.75:1); const speed=4.2*needsFactor*dt; needs.energy=Math.max(0,needs.energy-dt*.12); localPlayer.position.x+=v.x*speed;localPlayer.position.z-=v.z*speed;
    localPlayer.position.x=THREE.MathUtils.clamp(localPlayer.position.x,-31,31);
    localPlayer.position.z=THREE.MathUtils.clamp(localPlayer.position.z,-31,31);
    localPlayer.rotation.y=Math.atan2(v.x,-v.z);
@@ -244,5 +285,6 @@ function animate(){
  const light=1.35+Math.sin(t*Math.PI*2)*.3; sun.intensity=light;
  renderer.render(scene,camera);
 }
+updateInventory(); updateNeeds();
 animate();
 window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.6));});
