@@ -11,24 +11,30 @@
   <div id="game"></div>
   <div class="topbar">
     <div class="brand">🌾 Rannabati Village</div>
-    <div class="status" id="status">Offline demo · single player</div>
+    <div class="status" id="status">Loading village…</div>
   </div>
 
-  <section class="panel room-panel">
-    <h2>Play together</h2>
-    <p>Start a room or join your friend's room code.</p>
-    <div class="room-row">
-      <button id="createRoom">Create room</button>
-      <input id="roomCode" maxlength="6" placeholder="ROOM CODE" aria-label="Room code">
-      <button id="joinRoom" class="secondary">Join</button>
+  <section class="panel room-panel" aria-label="Play together">
+    <div class="panel-heading"><h2>Play together</h2><button id="toggleRoomPanel" class="collapse-btn" aria-label="Minimise room panel" aria-expanded="true">−</button></div>
+    <div class="room-panel-content">
+      <p>Start a room or join your friend's room code.</p>
+      <div class="room-row">
+        <button id="createRoom">Create room</button>
+        <input id="roomCode" maxlength="6" placeholder="ROOM CODE" aria-label="Room code" autocomplete="off">
+        <button id="joinRoom" class="secondary">Join</button>
+      </div>
+      <div class="share-row">
+        <button id="shareRoom" class="whatsapp-btn" disabled>Share on WhatsApp</button>
+        <button id="copyRoomLink" class="secondary" disabled>Copy link</button>
+      </div>
+      <div class="room-info" id="roomInfo">For multiplayer, enter your deployed server URL below.</div>
+      <details>
+        <summary>Multiplayer server URL</summary>
+        <input id="serverUrl" class="server-url" placeholder="https://your-server.onrender.com" autocomplete="url" value="https://rannabati-server.onrender.com">
+        <button id="saveServer" class="secondary">Connect server</button>
+        <small>Both players need the same multiplayer server. A room link includes the server URL.</small>
+      </details>
     </div>
-    <div class="room-info" id="roomInfo">For multiplayer, enter your deployed server URL below.</div>
-    <details>
-      <summary>Multiplayer server URL</summary>
-      <input id="serverUrl" class="server-url" placeholder="https://your-server.onrender.com">
-      <button id="saveServer" class="secondary">Connect server</button>
-      <small>Leave blank to explore the village locally. Both players must use the same server URL.</small>
-    </details>
   </section>
 
   <section class="panel needs-panel">
@@ -48,9 +54,36 @@
 
   <div id="joystick" aria-label="Movement joystick"><div id="stick"></div></div>
   <div class="help">Move: joystick or WASD / arrow keys · Collect nearby items · Shared actions sync in multiplayer</div>
-  <div id="toast" role="status"></div>
+  <div id="toast" role="status" aria-live="polite"></div>
 
-  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
-  <script type="module" src="game.js"></script>
+  <script>
+  (function () {
+    const sources = [
+      'https://cdn.socket.io/4.8.1/socket.io.min.js',
+      'https://cdn.jsdelivr.net/npm/socket.io-client@4.8.1/dist/socket.io.min.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.8.1/socket.io.min.js'
+    ];
+    const status = document.getElementById('status');
+    function loadAt(index) {
+      if (index >= sources.length) {
+        status.textContent = 'Offline demo · Socket.IO CDN unavailable';
+        import('./game.js').catch(showStartupError);
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = sources[index];
+      script.onload = function () { import('./game.js').catch(showStartupError); };
+      script.onerror = function () { script.remove(); loadAt(index + 1); };
+      document.head.appendChild(script);
+    }
+    function showStartupError(error) {
+      status.textContent = 'Game startup error';
+      const toast = document.getElementById('toast');
+      toast.textContent = 'The game could not start: ' + (error && error.message ? error.message : 'unknown error') + '. Refresh the page or send this message to support.';
+      toast.classList.add('show');
+    }
+    loadAt(0);
+  })();
+  </script>
 </body>
 </html>

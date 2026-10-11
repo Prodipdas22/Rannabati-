@@ -7,7 +7,16 @@ canvas { display:block; width:100%; height:100%; }
 .brand { font-weight:800; font-size:clamp(14px,3.8vw,20px); text-shadow:0 2px 5px #203d2c; }
 .status { font-size:11px; background:rgba(15,36,26,.8); padding:7px 10px; border-radius:99px; max-width:48%; text-align:center; }
 .panel { position:fixed; background:var(--panel); border:1px solid var(--line); border-radius:15px; padding:12px; box-shadow:0 8px 25px #17362633; backdrop-filter:blur(8px); }
-.room-panel { top:52px; left:10px; width:min(355px,calc(100vw - 20px)); max-height:42vh; overflow:auto; }
+.room-panel { top:52px; left:10px; width:min(355px,calc(100vw - 20px)); max-height:68vh; overflow:auto; }
+.panel-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:4px; }
+.panel-heading h2 { margin:0; }
+.collapse-btn { min-width:30px; width:30px; height:28px; padding:0; font-size:19px; line-height:1; background:#355a46; color:#fff; border:1px solid #6b8b76; }
+.room-panel.collapsed { width:auto; max-height:none; padding:8px 10px; }
+.room-panel.collapsed .room-panel-content { display:none; }
+.share-row { display:flex; gap:6px; margin-top:7px; }
+.share-row button { flex:1; padding:9px 7px; }
+button:disabled { opacity:.45; cursor:not-allowed; }
+.whatsapp-btn { background:#25a85a; color:#fff; }
 h2 { margin:0 0 4px; font-size:16px; }
 p { margin:0 0 9px; color:#d6e6da; font-size:12px; }
 .room-row { display:flex; gap:5px; }
@@ -36,7 +45,9 @@ small { display:block; color:#c4d6c9; line-height:1.4; margin-top:5px; }
 @media (max-width:620px) {
   .room-panel { top:48px; width:min(315px,calc(100vw - 20px)); }
   .needs-panel { top:auto; right:10px; bottom:158px; width:116px; padding:9px; }
-  .room-panel { max-height:34vh; }
+  .room-panel { max-height:55vh; }
+  .room-panel.collapsed { max-height:none; }
+  .share-row button { font-size:11px; }
   .actionbar { width:96px; right:9px; bottom:calc(16px + env(safe-area-inset-bottom)); }
   .actionbar button { padding:9px 5px; font-size:11px; }
   #joystick { width:106px; height:106px; left:12px; bottom:calc(23px + env(safe-area-inset-bottom)); }

@@ -91,6 +91,35 @@ const localPlayer=makePlayer(0x386fbd,'You'); localPlayer.position.set(0,0,0);
 const otherPlayers=new Map();
 const inventory={wood:0,food:0,water:0};
 let socket=null, currentRoom='', isMultiplayer=false, lastEmit=0, lastAction=0;
+let inviteRoomCode = new URLSearchParams(location.search).get('room')?.trim().toUpperCase() || '';
+const inviteServerUrl = new URLSearchParams(location.search).get('server') || '';
+const serverInput = document.querySelector('#serverUrl');
+try { serverInput.value = inviteServerUrl || localStorage.getItem('rannabatiServerUrl') || serverInput.value; } catch {}
+function makeRoomLink(room) {
+ const url = new URL(location.href); url.search = ''; url.hash = '';
+ url.searchParams.set('room', room);
+ const server = serverInput.value.trim().replace(/\/$/, '');
+ if (server) url.searchParams.set('server', server);
+ return url.href;
+}
+function showRoomShare(room) {
+ const link = makeRoomLink(room);
+ const shareBtn = document.querySelector('#shareRoom');
+ shareBtn.disabled = false; shareBtn.dataset.link = link;
+ document.querySelector('#roomInfo').textContent = `Room ${room} is ready. Share the invitation link with your friend.`;
+}
+function shareRoomWhatsApp() {
+ const link = document.querySelector('#shareRoom').dataset.link;
+ if (!currentRoom || !link) { showToast('Create or join a room first.'); return; }
+ const message = `Join my Rannabati Village room (${currentRoom})\n${link}`;
+ location.href = 'https://wa.me/?text=' + encodeURIComponent(message);
+}
+function copyRoomLink() {
+ const link = document.querySelector('#shareRoom').dataset.link;
+ if (!currentRoom || !link) { showToast('Create or join a room first.'); return; }
+ if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(link).then(()=>showToast('Room link copied!')).catch(()=>prompt('Copy this room link:', link));
+ else prompt('Copy this room link:', link);
+}
 let joystick={x:0,y:0}, keys={};
 function showToast(msg){ toastEl.textContent=msg; toastEl.classList.add('show'); clearTimeout(showToast.t); showToast.t=setTimeout(()=>toastEl.classList.remove('show'),1900); }
 function setStatus(msg){statusEl.textContent=msg;}
@@ -129,15 +158,16 @@ document.querySelector('#waveBtn').onclick=()=>performAction('wave');
 function connectServer(){
  const url=document.querySelector('#serverUrl').value.trim().replace(/\/$/,'');
  if(!url){showToast('Enter your deployed server URL first.');return;}
- if(!window.io){showToast('Socket.IO library did not load. Check internet.');return;}
+ if(!window.io){setStatus('Socket.IO client unavailable');roomInfo.textContent='The multiplayer library could not load from the available CDNs. Offline village play should still work. Try another network or disable content blockers.';showToast('Multiplayer library unavailable');return;}
+ try { localStorage.setItem('rannabatiServerUrl', url); } catch {}
  if(socket) socket.disconnect();
- socket=io(url,{transports:['websocket','polling'],timeout:8000});
- setStatus('Connecting…');
- socket.on('connect',()=>{setStatus('Server connected · create or join a room');roomInfo.textContent="Connected. Create a room or enter your friend's code.";});
- socket.on('connect_error',()=>{setStatus('Server unavailable');roomInfo.textContent='Could not connect. Check the server URL and make sure the backend is running.';});
+ socket=io(url,{transports:['websocket','polling'],timeout:12000,reconnection:true,reconnectionAttempts:3});
+ setStatus('Connecting to multiplayer server…');
+ socket.on('connect',()=>{setStatus('Server connected · create or join a room');roomInfo.textContent="Connected. Create a room or enter your friend\'s code."; if(inviteRoomCode){const code=inviteRoomCode;inviteRoomCode='';document.querySelector('#roomCode').value=code;roomInfo.textContent='Joining invitation room '+code+'…';socket.emit('joinRoom',code);}});
+ socket.on('connect_error',()=>{setStatus('Multiplayer server unreachable');roomInfo.textContent='Socket.IO loaded, but the server did not connect. Check the server URL, Render service status, and server CORS settings.';});
  socket.on('disconnect',()=>{setStatus('Disconnected from server');isMultiplayer=false;});
- socket.on('roomCreated',({room,players})=>{currentRoom=room;isMultiplayer=true;document.querySelector('#roomCode').value=room;roomInfo.textContent='Room '+room+' created. Share this code with your friend.';setStatus('Multiplayer · room '+room);showToast('Room created: '+room);syncOtherPlayers(players||[]);});
- socket.on('roomJoined',({room,players})=>{currentRoom=room;isMultiplayer=true;roomInfo.textContent='Joined room '+room+'. You are playing together!';setStatus('Multiplayer · room '+room);showToast('Joined village!');syncOtherPlayers(players||[]);});
+ socket.on('roomCreated',({room,players})=>{currentRoom=room;isMultiplayer=true;document.querySelector('#roomCode').value=room;showRoomShare(room);setStatus('Multiplayer · room '+room);showToast('Room created: '+room);syncOtherPlayers(players||[]);});
+ socket.on('roomJoined',({room,players})=>{currentRoom=room;isMultiplayer=true;document.querySelector('#roomCode').value=room;showRoomShare(room);setStatus('Multiplayer · room '+room);showToast('Joined village!');syncOtherPlayers(players||[]);});
  socket.on('roomError',msg=>showToast(typeof msg==='string'?msg:'Room error'));
  socket.on('playerJoined',p=>{if(p.id!==socket.id)addOtherPlayer(p);roomInfo.textContent='Your friend joined the village!';});
  socket.on('playerLeft',id=>{if(otherPlayers.has(id)){scene.remove(otherPlayers.get(id).mesh);otherPlayers.delete(id);}});
@@ -146,8 +176,12 @@ function connectServer(){
  socket.on('state',state=>{if(state.inventory){Object.assign(inventory,state.inventory);updateInventory();} if(state.collected){state.collected.forEach(i=>{if(resources[i])resources[i].group.visible=false;});}});
 }
 document.querySelector('#saveServer').onclick=connectServer;
+document.querySelector('#shareRoom').onclick=shareRoomWhatsApp;
+document.querySelector('#copyRoomLink').onclick=copyRoomLink;
+document.querySelector('#toggleRoomPanel').onclick=()=>{const panel=document.querySelector('.room-panel');const collapsed=panel.classList.toggle('collapsed');document.querySelector('#toggleRoomPanel').textContent=collapsed?'＋':'−';document.querySelector('#toggleRoomPanel').setAttribute('aria-expanded',String(!collapsed));};
 document.querySelector('#createRoom').onclick=()=>{if(!socket||!socket.connected){showToast('Connect to your multiplayer server first.');return;}socket.emit('createRoom');};
 document.querySelector('#joinRoom').onclick=()=>{if(!socket||!socket.connected){showToast('Connect to your multiplayer server first.');return;}const code=document.querySelector('#roomCode').value.trim().toUpperCase();if(code.length<4){showToast('Enter a valid room code.');return;}socket.emit('joinRoom',code);};
+if(inviteRoomCode && serverInput.value.trim()) { setStatus('Invitation link detected · connecting…'); connectServer(); }
 
 function addOtherPlayer(p){
  if(otherPlayers.has(p.id))return;
