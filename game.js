@@ -89,6 +89,51 @@ function makePlayer(color, name) {
 const myId='p'+Math.random().toString(36).slice(2,8);
 const localPlayer=makePlayer(0x386fbd,'You'); localPlayer.position.set(0,0,0);
 const otherPlayers=new Map();
+// V3B: villagers follow deterministic paths driven by the shared server clock.
+let sharedWorldEpoch = Date.now();
+let lastWorldClockSync = performance.now();
+let greetedVillager = '';
+const worldClockBadge = document.createElement('div');
+worldClockBadge.id = 'worldClockBadge';
+worldClockBadge.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:20;padding:7px 12px;border-radius:20px;background:rgba(20,35,25,.78);color:#fff;font:600 12px system-ui;pointer-events:none;box-shadow:0 2px 10px #0002;white-space:nowrap';
+worldClockBadge.textContent = 'Village · Day';
+document.body.appendChild(worldClockBadge);
+const npcData = [
+ {name:'Mina',color:0xd96b79,points:[[-4,2],[-1,4],[3,2],[2,-1],[-2,-2]],phase:0},
+ {name:'Biren',color:0xd5a24a,points:[[4,7],[7,4],[5,1],[1,1],[0,5]],phase:17},
+ {name:'Kaku',color:0x6e9dce,points:[[-12,-1],[-9,2],[-5,1],[-6,-4],[-10,-5]],phase:39}
+];
+const villagers = npcData.map((n,i)=>({ ...n, mesh:makePlayer(n.color,n.name), lastGreeting:false }));
+for (const v of villagers) { v.mesh.position.set(v.points[0][0],0,v.points[0][1]); }
+function getWorldSeconds(){ return sharedWorldEpoch/1000; }
+function applyWorldClock(epoch){ if(Number.isFinite(Number(epoch))){sharedWorldEpoch=Number(epoch);lastWorldClockSync=performance.now();} }
+function updateWorldClock(dt){
+ // A complete village day lasts 8 real minutes. When online, the server supplies the clock.
+ const epoch = isMultiplayer ? sharedWorldEpoch + Math.max(0,performance.now()-lastWorldClockSync) : Date.now();
+ const daySeconds = 480, phase = ((epoch/1000)%daySeconds)/daySeconds;
+ const angle = phase*Math.PI*2 - Math.PI/2;
+ const daylight = THREE.MathUtils.clamp((Math.sin(angle)+0.18)/1.18,0,1);
+ const night = 1-daylight;
+ sun.intensity = 0.18 + daylight*2.0;
+ sun.color.setRGB(1, 0.72+daylight*0.22, 0.48+daylight*0.42);
+ scene.background.setRGB(0.035+daylight*0.62,0.06+daylight*0.70,0.13+daylight*0.60);
+ scene.fog.color.copy(scene.background);
+ worldClockBadge.textContent = (phase<0.20?'🌅 Dawn':phase<0.48?'☀️ Day':phase<0.62?'🌇 Sunset':'🌙 Night')+' · '+(isMultiplayer?'Shared village time':'Local time');
+ // Smooth, repeatable walking loops mean every phone sees villagers in the same place.
+ const seconds=epoch/1000;
+ for(const v of villagers){
+   const cycle=(seconds/13+v.phase/60)%v.points.length;
+   const idx=Math.floor(cycle), frac=cycle-idx, a=v.points[idx], b=v.points[(idx+1)%v.points.length];
+   const x=THREE.MathUtils.lerp(a[0],b[0],frac), z=THREE.MathUtils.lerp(a[1],b[1],frac);
+   v.mesh.position.x=THREE.MathUtils.lerp(v.mesh.position.x,x,1-Math.exp(-dt*3));
+   v.mesh.position.z=THREE.MathUtils.lerp(v.mesh.position.z,z,1-Math.exp(-dt*3));
+   if(Math.hypot(b[0]-a[0],b[1]-a[1])>.01) v.mesh.rotation.y=Math.atan2(b[0]-a[0],-(b[1]-a[1]));
+   v.mesh.position.y=Math.abs(Math.sin(seconds*5+v.phase))*.035;
+ }
+ const near=villagers.find(v=>Math.hypot(localPlayer.position.x-v.mesh.position.x,localPlayer.position.z-v.mesh.position.z)<2.2);
+ if(near && greetedVillager!==near.name){greetedVillager=near.name;showToast(near.name+': Namaskar! Welcome to our village.');}
+ if(!near)greetedVillager='';
+}
 const inventory={wood:0,food:0,water:0};
 const needs={hunger:100,thirst:100,energy:100};
 let meals=0, coins=0, villageLevel=1, questStage=0, lastNeedTick=performance.now(), lastNeedUi=0;
@@ -219,6 +264,7 @@ function connectServer(){
  socket.on('playerJoined',p=>{if(p.id!==socket.id)addOtherPlayer(p);roomInfo.textContent='Your friend joined the village!';});
  socket.on('playerLeft',id=>{if(otherPlayers.has(id)){scene.remove(otherPlayers.get(id).mesh);otherPlayers.delete(id);}});
  socket.on('playerMoved',p=>updateOtherPlayer(p));
+ socket.on('worldClock',payload=>{ if(payload&&payload.epoch) applyWorldClock(payload.epoch); });
  socket.on('gameAction',payload=>handleRemoteAction(payload));
  socket.on('state',state=>{if(state.inventory){Object.assign(inventory,state.inventory);updateInventory();updateNeeds();} if(state.collected){state.collected.forEach(i=>{if(resources[i])resources[i].group.visible=false;});}});
 }
@@ -307,9 +353,7 @@ function animate(){
  camera.position.x=THREE.MathUtils.lerp(camera.position.x,localPlayer.position.x,dt*3);
  camera.position.z=THREE.MathUtils.lerp(camera.position.z,localPlayer.position.z+12,dt*3);
  camera.lookAt(localPlayer.position.x,0,localPlayer.position.z);
- // Day-night tint, slow gentle cycle
- const t=(performance.now()/1000)%120/120;
- const light=1.35+Math.sin(t*Math.PI*2)*.3; sun.intensity=light;
+ updateWorldClock(dt);
  renderer.render(scene,camera);
 }
 updateInventory(); updateNeeds();
