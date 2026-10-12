@@ -352,7 +352,12 @@ let sleptToday=false, ateMeal=false, drankWater=false, questRewarded=false;
 let socket=null, currentRoom='', isMultiplayer=false, lastEmit=0, lastAction=0;
 let inviteRoomCode = new URLSearchParams(location.search).get('room')?.trim().toUpperCase() || '';
 const inviteServerUrl = new URLSearchParams(location.search).get('server') || '';
-const serverInput = document.querySelector('#serverUrl');
+const serverInput = document.querySelector('#serverUrl') || Object.assign(document.createElement('input'), { id: 'serverUrl', type: 'hidden', value: '' });
+// Keep the technical server URL out of the player-facing Play Together panel.
+const serverDetails = serverInput.closest('details');
+if (serverDetails) serverDetails.remove();
+serverInput.type = 'hidden';
+if (!serverInput.isConnected) document.body.appendChild(serverInput);
 try { serverInput.value = inviteServerUrl || localStorage.getItem('rannabatiServerUrl') || serverInput.value; } catch {}
 function makeRoomLink(room) {
  const url = new URL(location.href); url.search = ''; url.hash = '';
@@ -447,7 +452,7 @@ function safeSet(key,value){try{localStorage.setItem(key,value);}catch{}}
 
 function connectServer(){
  const url=document.querySelector('#serverUrl').value.trim().replace(/\/$/,'');
- if(!url){showToast('Enter your deployed server URL first.');return;}
+ if(!url){setStatus('Multiplayer not configured');roomInfo.textContent='Multiplayer is not configured on this device yet.';showToast('Multiplayer is not configured yet.');return;}
  if(!window.io){setStatus('Socket.IO client unavailable');roomInfo.textContent='The multiplayer library could not load from the available CDNs. Offline village play should still work. Try another network or disable content blockers.';showToast('Multiplayer library unavailable');return;}
  try { localStorage.setItem('rannabatiServerUrl', url); } catch {}
  if(socket) socket.disconnect();
@@ -479,13 +484,13 @@ function connectServer(){
  socket.on('animalResult',result=>{if(result&&result.farm)paintFarm(result.farm);if(result&&result.livestock)paintLivestock(result.livestock);if(result&&result.message)showToast(result.message);});
  socket.on('farmResult',result=>{if(result&&result.farm)paintFarm(result.farm);if(result&&result.message)showToast(result.message);});
 }
-document.querySelector('#saveServer').onclick=connectServer;
+const saveServerButton=document.querySelector('#saveServer'); if(saveServerButton) saveServerButton.onclick=connectServer;
 document.querySelector('#shareRoom').onclick=shareRoomWhatsApp;
 document.querySelector('#copyRoomLink').onclick=copyRoomLink;
 document.querySelector('#toggleRoomPanel').onclick=()=>{const panel=document.querySelector('.room-panel');const collapsed=panel.classList.toggle('collapsed');document.querySelector('#toggleRoomPanel').textContent=collapsed?'＋':'−';document.querySelector('#toggleRoomPanel').setAttribute('aria-expanded',String(!collapsed));};
 document.querySelector('#createRoom').onclick=()=>{if(!socket||!socket.connected){showToast('Connect to your multiplayer server first.');return;}socket.emit('createRoom');};
 document.querySelector('#joinRoom').onclick=()=>{if(!socket||!socket.connected){showToast('Connect to your multiplayer server first.');return;}const code=document.querySelector('#roomCode').value.trim().toUpperCase();if(code.length<4){showToast('Enter a valid room code.');return;}socket.emit('joinRoom',code);};
-if(inviteRoomCode && serverInput.value.trim()) { setStatus('Invitation link detected · connecting…'); connectServer(); }
+if(serverInput.value.trim()) { setStatus('Connecting to village…'); connectServer(); }
 
 function addOtherPlayer(p){
  if(!p||!p.id||p.id===socket?.id)return;
