@@ -2,101 +2,99 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <meta name="theme-color" content="#214d38">
-  <title>Rannabati Village — Two Player Life</title>
-  <link rel="stylesheet" href="style.css">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
+  <meta name="theme-color" content="#3d2d1a">
+  <meta name="description" content="Explore, farm, build and play together in Rannabati Village.">
+  <title>Rannabati Village — Village Life</title>
+  <link rel="stylesheet" href="./style.css">
 </head>
 <body>
-  <div id="game"></div>
-  <div class="topbar">
-    <div class="brand">🌾 Rannabati Village</div>
-    <div class="status" id="status">Loading village…</div>
-  </div>
+  <main id="game" aria-label="Rannabati Village 3D game"></main>
+
+  <header class="top-hud">
+    <div class="brand">🏡 <span>Rannabati<br>Village</span></div>
+    <div class="resource-strip" aria-label="Resources">
+      <div class="resource"><span>🪵</span><small>Wood</small><b id="woodCount">0</b></div>
+      <div class="resource"><span>🥕</span><small>Food</small><b id="foodCount">0</b></div>
+      <div class="resource"><span>💧</span><small>Water</small><b id="waterCount">0</b></div>
+      <div class="resource meter-resource"><span>⚡</span><small>Energy</small><b id="energyValue">100%</b><i class="meter"><i id="energyBar" style="width:100%"></i></i></div>
+      <div class="resource meter-resource"><span>😊</span><small>Hunger</small><b id="hungerValue">100%</b><i class="meter"><i id="hungerBar" style="width:100%"></i></i></div>
+      <div class="resource meter-resource"><span>💦</span><small>Thirst</small><b id="thirstValue">100%</b><i class="meter"><i id="thirstBar" style="width:100%"></i></i></div>
+    </div>
+    <div class="connection"><span class="status-dot"></span><span id="status">Offline · solo village</span></div>
+  </header>
 
   <section class="panel room-panel" aria-label="Play together">
-    <div class="panel-heading"><h2>Play together</h2><button id="toggleRoomPanel" class="collapse-btn" aria-label="Minimise room panel" aria-expanded="true">−</button></div>
-    <div class="room-panel-content">
-      <p>Start a room or join your friend's room code.</p>
+    <div class="panel-head"><h2>👥 Play together</h2><button id="toggleRoomPanel" aria-expanded="true" aria-label="Collapse multiplayer panel">−</button></div>
+    <div class="room-content">
+      <p>Create a room or join a friend's village.</p>
       <div class="room-row">
         <button id="createRoom">Create room</button>
-        <input id="roomCode" maxlength="6" placeholder="ROOM CODE" aria-label="Room code" autocomplete="off">
+        <input id="roomCode" maxlength="5" placeholder="CODE" aria-label="Room code" autocomplete="off">
         <button id="joinRoom" class="secondary">Join</button>
       </div>
       <div class="share-row">
-        <button id="shareRoom" class="whatsapp-btn" disabled>Share on WhatsApp</button>
-        <button id="copyRoomLink" class="secondary" disabled>Copy link</button>
+        <button id="shareRoom" class="secondary" disabled>Share on WhatsApp</button>
+        <button id="copyRoomLink" class="secondary">Copy link</button>
       </div>
-      <div class="room-info" id="roomInfo">For multiplayer, enter your deployed server URL below.</div>
+      <div class="room-info" id="roomInfo">Solo mode is available. Configure your multiplayer server to play with a friend.</div>
       <details>
-        <summary>Multiplayer server URL</summary>
-        <input id="serverUrl" class="server-url" placeholder="https://your-server.onrender.com" autocomplete="url" value="https://rannabati-server.onrender.com">
-        <button id="saveServer" class="secondary">Connect server</button>
-        <small>Both players need the same multiplayer server. A room link includes the server URL.</small>
+        <summary>Multiplayer connection</summary>
+        <label for="serverUrl">Server URL</label>
+        <input id="serverUrl" class="server-url" placeholder="https://your-service.onrender.com" inputmode="url" autocomplete="url">
+        <button id="saveServer" class="secondary full-width">Connect server</button>
+        <small>Both players need the same server URL. Use your deployed HTTPS backend.</small>
       </details>
     </div>
   </section>
 
-  <section class="panel needs-panel">
-    <div class="need"><span>🪵 Wood</span><b id="woodCount">0</b></div>
-    <div class="need"><span>🥕 Food</span><b id="foodCount">0</b></div>
-    <div class="need"><span>💧 Water</span><b id="waterCount">0</b></div>
-    <div class="need"><span>🍲 Meals</span><b id="mealCount">0</b></div>
-    <div class="meter-label"><span>🍚 Hunger</span><b id="hungerValue">100%</b></div>
-    <div class="meter"><div id="hungerBar" class="meter-fill hunger-fill"></div></div>
-    <div class="meter-label"><span>💧 Thirst</span><b id="thirstValue">100%</b></div>
-    <div class="meter"><div id="thirstBar" class="meter-fill thirst-fill"></div></div>
-    <div class="meter-label"><span>⚡ Energy</span><b id="energyValue">100%</b></div>
-    <div class="meter"><div id="energyBar" class="meter-fill energy-fill"></div></div>
-    <div class="quest-box"><b>📜 Village tasks</b><div id="questText">Collect 2 wood, 2 food and 1 water.</div><div class="quest-progress"><div id="questBar"></div></div><small id="levelText">Village level 1 · 0 coins</small></div>
-    <div class="hint" id="hint">Move near resources to collect. Keep hunger, thirst and energy up!</div>
+  <section class="panel needs-panel" aria-label="Survival status">
+    <div class="level" id="levelText">Village level 1 · 0 coins</div>
+    <div class="need-row"><span>😊 Hunger</span><b id="hungerValueLabel">100%</b></div>
+    <div class="mini-meter"><i id="hungerBarMirror" style="width:100%"></i></div>
+    <div class="need-row"><span>💧 Thirst</span><b id="thirstValueLabel">100%</b></div>
+    <div class="mini-meter"><i id="thirstBarMirror" style="width:100%"></i></div>
+    <div class="need-row"><span>⚡ Energy</span><b id="energyValueLabel">100%</b></div>
+    <div class="mini-meter"><i id="energyBarMirror" style="width:100%"></i></div>
+    <div class="quest"><strong>Village task</strong><p id="questText">Gather resources and help your village.</p><div class="quest-track"><i id="questBar" style="width:0%"></i></div></div>
+    <div class="hint" id="hint">Move near an item and tap Collect.</div>
+    <div class="inventory-extra">Meals cooked: <b id="mealCount">0</b></div>
   </section>
 
-  <div class="actionbar">
-    <button id="collectBtn">Collect</button>
-    <button id="cookBtn">🍲 Cook</button>
-    <button id="eatBtn">🥣 Eat meal</button>
-    <button id="drinkBtn">💧 Drink</button>
-    <button id="homeBtn">🏡 Go home</button>
-    <button id="sleepBtn">🌙 Sleep</button>
-    <button id="waveBtn" class="secondary">👋 Wave</button>
-  </div>
+  <nav class="actionbar" aria-label="Quick actions">
+    <button id="collectBtn">🧺 <span>Collect</span></button>
+    <button id="cookBtn">🍲 <span>Cook</span></button>
+    <button id="eatBtn">🥣 <span>Eat</span></button>
+    <button id="drinkBtn">🥤 <span>Drink</span></button>
+    <button id="homeBtn">🏡 <span>Home</span></button>
+    <button id="sleepBtn">🌙 <span>Sleep</span></button>
+    <button id="waveBtn" class="secondary">👋 <span>Wave</span></button>
+  </nav>
 
   <div id="joystick" aria-label="Movement joystick"><div id="stick"></div></div>
-  <div class="help">Move: joystick or WASD / arrow keys · Collect nearby items · Shared actions sync in multiplayer</div>
+  <div class="help">Move with the joystick or WASD · Gather, farm, raise animals, build and trade</div>
   <div id="toast" role="status" aria-live="polite"></div>
-
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+  <script type="module" src="./game.js"></script>
   <script>
-  (function () {
-    // Prefer a copy hosted by your own GitHub Pages site. Upload socket.io.min.js
-    // beside index.html. If it is missing, try public CDNs as a fallback.
-    const sources = [
-      './socket.io.min.js',
-      'https://cdn.socket.io/4.8.1/socket.io.min.js',
-      'https://cdn.jsdelivr.net/npm/socket.io-client@4.8.1/dist/socket.io.min.js',
-      'https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.8.1/socket.io.min.js'
-    ];
-    const status = document.getElementById('status');
-    function loadAt(index) {
-      if (index >= sources.length) {
-        status.textContent = 'Offline demo · Socket.IO CDN unavailable';
-        import('./game.js').catch(showStartupError);
-        return;
+    // Mirror the top HUD meters into the compact survival panel.
+    const mirror = () => {
+      for (const key of ["hunger","thirst","energy"]) {
+        const src = document.getElementById(key + "Value");
+        const srcBar = document.getElementById(key + "Bar");
+        const label = document.getElementById(key + "ValueLabel");
+        const bar = document.getElementById(key + "BarMirror");
+        if (src && label && label.textContent !== src.textContent) label.textContent = src.textContent;
+        if (srcBar && bar && bar.style.width !== srcBar.style.width) bar.style.width = srcBar.style.width;
       }
-      const script = document.createElement('script');
-      script.src = sources[index];
-      script.onload = function () { import('./game.js').catch(showStartupError); };
-      script.onerror = function () { script.remove(); loadAt(index + 1); };
-      document.head.appendChild(script);
-    }
-    function showStartupError(error) {
-      status.textContent = 'Game startup error';
-      const toast = document.getElementById('toast');
-      toast.textContent = 'The game could not start: ' + (error && error.message ? error.message : 'unknown error') + '. Refresh the page or send this message to support.';
-      toast.classList.add('show');
-    }
-    loadAt(0);
-  })();
+    };
+    new MutationObserver(mirror).observe(document.body, {subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:["style"]});
+    document.getElementById("toggleRoomPanel").addEventListener("click", () => {
+      const panel = document.querySelector(".room-panel");
+      const collapsed = panel.classList.toggle("collapsed");
+      document.getElementById("toggleRoomPanel").textContent = collapsed ? "+" : "−";
+      document.getElementById("toggleRoomPanel").setAttribute("aria-expanded", String(!collapsed));
+    });
   </script>
 </body>
 </html>

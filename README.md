@@ -1,80 +1,38 @@
-# Rannabati Village — Android-first starter project
+# Rannabati Village — Production-Oriented Web Game Bundle
 
-A small, free-to-build browser game prototype inspired by village-life pretend play. It has a simple 3D village, a controllable character, collectable resources, a cooking action, a home/bed, mobile joystick controls, and an optional Socket.IO server for two-player rooms.
+This package assembles the latest V3I game frontend (including landscape fullscreen request) with the V3H Socket.IO backend and PostgreSQL snapshot persistence, plus a responsive HUD and mobile controls layout.
 
-## Files
-- `index.html`, `style.css`, `game.js`: browser game frontend
-- `server/server.js`, `server/package.json`: realtime multiplayer server
+## Project contents
+- `index.html` — frontend page and required DOM IDs for the game logic
+- `style.css` — responsive earthy village UI, safe-area and landscape rules
+- `game.js` — Three.js world, player movement, resources, needs, quests, farming, livestock, building, market and multiplayer client
+- `server/server.js` — Node.js/Express/Socket.IO backend with shared-room actions and PostgreSQL snapshot persistence
+- `server/package.json` — backend dependencies and start script
+- `render.yaml` — optional Render blueprint for the backend
+- `.gitignore` — excludes local environment files and dependencies
 
-## Test the village locally on Android
-1. Download and extract the ZIP.
-2. Open `index.html` from a local web server or publish the frontend to GitHub Pages. ES modules often fail when opened as a `file://` URL, so do not test by tapping the HTML file directly.
-3. Create a GitHub repository, upload `index.html`, `style.css`, and `game.js` to its root, then open **Settings → Pages** and deploy from the `main` branch / root folder.
-4. Visit the GitHub Pages URL in Chrome. Allow the Three.js CDN to load.
+## Frontend deployment (GitHub Pages)
+1. Upload `index.html`, `style.css`, and `game.js` to the root of your GitHub repository.
+2. Open **Settings → Pages** and deploy from the `main` branch, root folder.
+3. Open the published HTTPS URL in Chrome. Three.js and Socket.IO are loaded from public CDNs, so an internet connection is required.
 
-## Publish the frontend with GitHub Pages
-1. Sign in at https://github.com/ and create a public repository, e.g. `rannabati-village`.
-2. Upload the three frontend files (`index.html`, `style.css`, `game.js`) to the repository root.
-3. Go to **Settings → Pages**.
-4. Under Build and deployment, choose **Deploy from a branch**, branch `main`, folder `/ (root)`, and save.
-5. Wait for deployment, then open the published URL.
+## Backend deployment (Render)
+1. Deploy this repository as a Render Web Service with **Root Directory** `server`.
+2. Build command: `npm install`
+3. Start command: `npm start`
+4. Create a PostgreSQL database and set `DATABASE_URL` on the web service to the database's private/internal connection URL when available.
+5. Set `DATABASE_SSL` only if your database provider requires it. Default is managed PostgreSQL TLS with certificate verification disabled for compatibility; follow your provider's current TLS guidance.
+6. Confirm `https://YOUR-SERVICE/health` reports `{"status":"ok","database":true,...}` before treating durable persistence as configured.
+7. On the game, open **Multiplayer connection**, enter the backend's HTTPS URL, and tap **Connect server** on both devices. One player creates a room; the other joins using the room code or invite link.
 
-## Deploy the multiplayer server
-GitHub Pages cannot run Node.js. Deploy the `server` folder to a Node.js hosting service that offers a free tier, or use another suitable free realtime host. Free plans can sleep, have quotas, and may change.
+## Mobile usage
+- Use the on-screen joystick or WASD/arrow keys.
+- Tap **Fullscreen** in the game interface. On compatible mobile browsers, the game requests landscape orientation after the user gesture; otherwise rotate the device manually.
+- UI spacing adapts to narrow, tall and landscape viewports.
 
-For a typical Node host:
-1. Create a new web service connected to your repository.
-2. Set the service root directory to `server`.
-3. Build command: `npm install`
-4. Start command: `npm start`
-5. Use the public HTTPS service URL, for example `https://your-service.example.com`.
+## Validation performed
+- JavaScript syntax checks are part of the packaging workflow.
+- A full live deployment, two-device multiplayer test, and real PostgreSQL restart/recovery test have not been run in this environment; perform those checks before a public launch.
 
-The server has a simple health check at `/health`.
-
-## Connect two players
-1. Open the game URL on both devices.
-2. Expand **Multiplayer server URL** on both devices and enter the same deployed server URL.
-3. Tap **Connect server** on both devices.
-4. Player 1 taps **Create room** and shares the five-character code.
-5. Player 2 enters the code and taps **Join**.
-
-## Current prototype limits
-- 3D art uses simple geometric shapes, not final character models.
-- The room exists in server memory and disappears when empty or when the server restarts.
-- Server-side inventory state is synchronized for room players; this starter is not production-hardened.
-- Resources are intentionally simple; later iterations should add per-player interaction validation, proper animations, persistence, reconnect handling, and better resource spawning.
-- This starter does not require paid software, a paid domain, or a database. It does require internet access to load the CDN libraries and connect multiplayer.
-
-## Troubleshooting
-- **Blank screen:** use the published HTTPS URL, check internet access, and reload.
-- **Multiplayer not connecting:** open `https://YOUR-SERVER-URL/health`, confirm it returns `{"status":"ok"}`, and use the exact HTTPS server base URL in the game.
-- **Room not found:** create the room first and make sure the server did not restart.
-
-
-## Updates in this build
-- Room invitation links include the room code and multiplayer server URL. Use **Share on WhatsApp** after creating/joining a room. Invitees are connected and auto-join the room when they open the link.
-- The Play together panel can be collapsed with the − / + button.
-- Socket.IO client loading tries three CDN locations. If all fail, offline play still loads and multiplayer gets a more specific message. A server connection error is reported separately from a missing client library.
-- The server URL is remembered in local storage on the device. Keep the server URL and backend running for both players.
-
-
-## Gameplay upgrade (v2)
-- Survival meters: hunger, thirst and energy slowly decrease while you play. Low hunger/thirst or energy reduces walking speed.
-- Cook food using 1 food + 1 wood, then use **Eat meal** to restore hunger and a little energy.
-- Collect water, then use **Drink** to restore thirst.
-- Sleep near the bed to restore energy.
-- A village task chain introduces gathering, cooking, eating, drinking and sleeping goals. Completing tasks awards coins and raises your village level.
-- Existing room links and multiplayer movement/resource syncing remain in place. Needs, meals, coins and quest progress are currently local to each player; they are not saved across refreshes or synchronized between players.
-
-
-## Host Socket.IO client locally (recommended for mobile compatibility)
-
-Some mobile networks or browsers block a third-party CDN. To serve the Socket.IO browser client from your own GitHub Pages site:
-
-1. Download the official Socket.IO 4.8.1 browser client file from: https://cdn.socket.io/4.8.1/socket.io.min.js
-2. Save it with the exact filename `socket.io.min.js`. Make sure it is the JavaScript file, not an HTML error page.
-3. Upload `socket.io.min.js` to the repository root, in the same folder as `index.html`, `style.css`, and `game.js`.
-4. Commit the file and wait for GitHub Pages to redeploy.
-5. Test this URL in a browser: `https://YOUR-USERNAME.github.io/YOUR-REPOSITORY/socket.io.min.js` — it should display JavaScript, not a 404 page.
-
-The updated `index.html` tries `./socket.io.min.js` first and then tries public CDN fallbacks. Hosting the client locally avoids depending on a third-party CDN for loading the Socket.IO browser library. It does **not** replace the multiplayer backend: the Render/Socket.IO server must still be running and its URL must be correct.
+## Important production notes
+This is a deployable project bundle, but it should not be described as fully production-certified until the deployment checks above pass. The current backend stores shared room snapshots, not an immutable event ledger; player positions are transient. Configure a database and monitor `/health`. Free hosting tiers may sleep or have usage limits. Room codes are invitation codes, not user authentication. The backend currently uses permissive Socket.IO CORS to support GitHub Pages deployment; for a public launch, set an explicit frontend-origin allowlist in the server configuration and add abuse/rate controls appropriate to your audience.
