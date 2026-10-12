@@ -583,12 +583,12 @@ function animate(){
  ];
  const style=document.createElement('style');
  style.textContent=`
-  #villageDock{position:fixed;z-index:80;left:10px;right:10px;bottom:12px;margin:auto;width:min(390px,calc(100vw - 20px));font:14px system-ui,-apple-system,sans-serif;color:#fff;pointer-events:none}
+  #villageDock{position:fixed;z-index:80;left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom));margin:auto;width:min(430px,calc(100vw - 16px));font:14px system-ui,-apple-system,sans-serif;color:#fff;pointer-events:none}
   #villageDock *{box-sizing:border-box}
   #villageTabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;padding:6px;background:rgba(25,39,29,.94);border:1px solid #ffffff30;border-radius:17px;box-shadow:0 4px 18px #0003;pointer-events:auto;backdrop-filter:blur(8px)}
   #villageTabs button{min-width:0;border:0;border-radius:11px;padding:9px 2px;background:transparent;color:#e7e9df;font:600 11px system-ui;touch-action:manipulation}
   #villageTabs button.active{background:#f1cc7a;color:#2d3324}
-  #villageDrawer{display:none;margin-bottom:7px;max-height:min(42vh,330px);overflow:auto;padding:12px;background:rgba(25,39,29,.96);border:1px solid #ffffff30;border-radius:17px;box-shadow:0 4px 20px #0004;pointer-events:auto;backdrop-filter:blur(10px)}
+  #villageDrawer{display:none;margin-bottom:7px;max-height:min(36dvh,300px);overflow:auto;padding:12px;background:rgba(25,39,29,.96);border:1px solid #ffffff30;border-radius:17px;box-shadow:0 4px 20px #0004;pointer-events:auto;backdrop-filter:blur(10px)}
   #villageDrawer.open{display:block}
   #villageDrawer>section{position:static!important;inset:auto!important;width:100%!important;max-width:none!important;max-height:none!important;overflow:visible!important;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;background:transparent!important;font:13px system-ui!important;color:#fff!important}
   #villageDrawer section>div:first-child{font-size:16px!important;margin:0 0 8px!important}
@@ -598,9 +598,14 @@ function animate(){
   #villageDrawer section>div:last-child{font-size:11px!important;line-height:1.35;margin-top:8px!important;color:#d6d9cc}
   #villageDock .village-drawer-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-weight:750}
   #villageDock #villageClose{border:0;background:#ffffff18;color:#fff;border-radius:9px;min-width:32px;min-height:30px;font-size:18px}
-  @media(max-width:600px){#villageDock{bottom:calc(10px + env(safe-area-inset-bottom))}#villageDrawer{max-height:38vh}#villageTabs button{font-size:10px;padding:8px 1px}}
+  @media(max-width:600px){#villageDock{bottom:calc(6px + env(safe-area-inset-bottom));left:6px;right:6px;width:calc(100vw - 12px)}#villageDrawer{max-height:min(34dvh,270px);padding:10px}#villageTabs{gap:3px;padding:4px;border-radius:14px}#villageTabs button{font-size:10px;padding:7px 1px;min-height:50px}#villageTabs button span{font-size:15px!important}#villageDrawer section button{min-height:44px!important;font-size:12px!important}}
+  html,body{margin:0;width:100%;height:100%;overflow:hidden;overscroll-behavior:none;touch-action:manipulation}canvas{display:block;max-width:100vw;max-height:100dvh}#villageFullscreen{position:fixed;top:calc(8px + env(safe-area-inset-top));right:8px;z-index:100;border:1px solid #ffffff35;border-radius:12px;padding:9px 11px;background:rgba(25,39,29,.88);color:#fff;font:600 12px system-ui;box-shadow:0 2px 10px #0003;touch-action:manipulation}body:fullscreen #villageFullscreen{top:8px}body:fullscreen #villageDock{bottom:calc(6px + env(safe-area-inset-bottom))} @media(orientation:landscape) and (max-height:500px){#villageDrawer{max-height:42dvh}#villageTabs button{min-height:40px;padding:4px 1px}#villageFullscreen{padding:6px 8px}}
  `;
  document.head.appendChild(style);
+ // Fullscreen is user-initiated because browsers require a tap; portrait-friendly layout adapts to each viewport.
+ const fullscreenBtn=document.createElement('button');fullscreenBtn.id='villageFullscreen';fullscreenBtn.type='button';fullscreenBtn.textContent='⛶ Fullscreen';fullscreenBtn.setAttribute('aria-label','Open game in fullscreen');document.body.appendChild(fullscreenBtn);
+ async function toggleGameFullscreen(){try{if(!document.fullscreenElement){await (document.documentElement.requestFullscreen?document.documentElement.requestFullscreen():Promise.reject());fullscreenBtn.textContent='⤢ Exit full';if(screen.orientation&&screen.orientation.lock){try{await screen.orientation.lock('portrait')}catch(_){}}}else{await document.exitFullscreen();fullscreenBtn.textContent='⛶ Fullscreen'}}catch(_){fullscreenBtn.textContent='Fullscreen unavailable';setTimeout(()=>{fullscreenBtn.textContent='⛶ Fullscreen'},1800)}}
+ fullscreenBtn.addEventListener('click',toggleGameFullscreen);document.addEventListener('fullscreenchange',()=>{fullscreenBtn.textContent=document.fullscreenElement?'⤢ Exit full':'⛶ Fullscreen';window.dispatchEvent(new Event('resize'));});
  const dock=document.createElement('div');dock.id='villageDock';
  const drawer=document.createElement('div');drawer.id='villageDrawer';
  const head=document.createElement('div');head.className='village-drawer-head';
