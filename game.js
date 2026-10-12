@@ -568,6 +568,55 @@ function animate(){
  if(Math.floor(now/400)!==Math.floor((now-dt*1000)/400)){updateFarmPanel();updateAnimalPanel();updateBuildingPanel();updateMarketPanel();}
  renderer.render(scene,camera);
 }
+// V3G compact mobile UI: one contextual drawer instead of four overlapping panels.
+(function installCompactVillageUI(){
+ const panels=[
+  {id:'farmPanel',label:'Farm',icon:'🌱'},
+  {id:'animalPanel',label:'Animals',icon:'🐄'},
+  {id:'buildingPanel',label:'Build',icon:'🏡'},
+  {id:'marketPanel',label:'Market',icon:'🧺'}
+ ];
+ const style=document.createElement('style');
+ style.textContent=`
+  #villageDock{position:fixed;z-index:80;left:10px;right:10px;bottom:12px;margin:auto;width:min(390px,calc(100vw - 20px));font:14px system-ui,-apple-system,sans-serif;color:#fff;pointer-events:none}
+  #villageDock *{box-sizing:border-box}
+  #villageTabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;padding:6px;background:rgba(25,39,29,.94);border:1px solid #ffffff30;border-radius:17px;box-shadow:0 4px 18px #0003;pointer-events:auto;backdrop-filter:blur(8px)}
+  #villageTabs button{min-width:0;border:0;border-radius:11px;padding:9px 2px;background:transparent;color:#e7e9df;font:600 11px system-ui;touch-action:manipulation}
+  #villageTabs button.active{background:#f1cc7a;color:#2d3324}
+  #villageDrawer{display:none;margin-bottom:7px;max-height:min(42vh,330px);overflow:auto;padding:12px;background:rgba(25,39,29,.96);border:1px solid #ffffff30;border-radius:17px;box-shadow:0 4px 20px #0004;pointer-events:auto;backdrop-filter:blur(10px)}
+  #villageDrawer.open{display:block}
+  #villageDrawer>section{position:static!important;inset:auto!important;width:100%!important;max-width:none!important;max-height:none!important;overflow:visible!important;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;background:transparent!important;font:13px system-ui!important;color:#fff!important}
+  #villageDrawer section>div:first-child{font-size:16px!important;margin:0 0 8px!important}
+  #villageDrawer section [id$="Stats"]{font-size:12px!important;color:#e9e6d8;line-height:1.55!important}
+  #villageDrawer section [id$="Selected"]{font-size:12px!important;line-height:1.4;margin:5px 0 9px!important;color:#f1d99e!important}
+  #villageDrawer section button{min-height:42px!important;padding:9px 7px!important;border-radius:11px!important;font-size:12px!important;line-height:1.2!important;box-shadow:0 1px 0 #0001}
+  #villageDrawer section>div:last-child{font-size:11px!important;line-height:1.35;margin-top:8px!important;color:#d6d9cc}
+  #villageDock .village-drawer-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-weight:750}
+  #villageDock #villageClose{border:0;background:#ffffff18;color:#fff;border-radius:9px;min-width:32px;min-height:30px;font-size:18px}
+  @media(max-width:600px){#villageDock{bottom:calc(10px + env(safe-area-inset-bottom))}#villageDrawer{max-height:38vh}#villageTabs button{font-size:10px;padding:8px 1px}}
+ `;
+ document.head.appendChild(style);
+ const dock=document.createElement('div');dock.id='villageDock';
+ const drawer=document.createElement('div');drawer.id='villageDrawer';
+ const head=document.createElement('div');head.className='village-drawer-head';
+ head.innerHTML='<span id="villageDrawerTitle">🌱 Farm</span><button id="villageClose" aria-label="Close actions">×</button>';
+ drawer.appendChild(head);
+ const tabs=document.createElement('div');tabs.id='villageTabs';
+ const tabButtons=[];let activeId='farmPanel',opened=false;
+ panels.forEach(item=>{
+  const panel=document.getElementById(item.id);if(!panel)return;
+  drawer.appendChild(panel);
+  const btn=document.createElement('button');btn.type='button';btn.innerHTML=`<span style="display:block;font-size:17px;margin-bottom:2px">${item.icon}</span>${item.label}`;
+  btn.setAttribute('aria-label',item.label);btn.addEventListener('click',()=>{if(activeId===item.id&&opened){setOpen(false);return;}activeId=item.id;setOpen(true);});
+  tabs.appendChild(btn);tabButtons.push({btn,item});
+ });
+ dock.append(drawer,tabs);document.body.appendChild(dock);
+ function setOpen(value){opened=value;drawer.classList.toggle('open',opened);tabButtons.forEach(({btn,item})=>{btn.classList.toggle('active',item.id===activeId);btn.setAttribute('aria-pressed',String(item.id===activeId&&opened));const panel=document.getElementById(item.id);if(panel)panel.style.display=(opened&&item.id===activeId)?'block':'none';});const item=panels.find(p=>p.id===activeId)||panels[0];document.querySelector('#villageDrawerTitle').textContent=item.icon+' '+item.label;}
+ document.querySelector('#villageClose').addEventListener('click',()=>setOpen(false));
+ // Start collapsed so the world remains visible; first tab tap opens its actions.
+ setOpen(false);
+})();
+
 updateInventory(); updateNeeds(); paintFarm(sharedFarm); paintBuildings(sharedBuildings); updateMarketPanel();
 animate();
 window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.6));});
