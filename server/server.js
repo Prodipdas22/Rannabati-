@@ -1,6 +1,7 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+const { Pool } = require('pg');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -12,13 +13,51 @@ const io = new Server(server, {
 });
 const PORT = process.env.PORT || 3000;
 const rooms = new Map();
+const pool = process.env.DATABASE_URL ? new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: false }, max: 5, idleTimeoutMillis: 30000, connectionTimeoutMillis: 10000 }) : null;
+let databaseReady = false;
+const saveQueues = new Map();
+async function initDatabase() {
+  if (!pool) { console.warn('DATABASE_URL is not set; persistence is disabled. Configure a Render PostgreSQL database for durable saves.'); return; }
+  await pool.query(`CREATE TABLE IF NOT EXISTS rannabati_room_saves (room_code VARCHAR(5) PRIMARY KEY, snapshot JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+  databaseReady = true;
+}
+function snapshotRoom(r) { return { inventory: { ...r.inventory }, collected: [...r.collected], farm: r.farm, livestock: r.livestock, buildings: r.buildings }; }
+async function persistRoom(code) {
+  const r = rooms.get(code); if (!pool || !databaseReady || !r) return;
+  const snapshot = snapshotRoom(r);
+  const previous = saveQueues.get(code) || Promise.resolve();
+  const current = previous.catch(() => {}).then(() => pool.query(
+    'INSERT INTO rannabati_room_saves (room_code, snapshot, updated_at) VALUES ($1, $2::jsonb, NOW()) ON CONFLICT (room_code) DO UPDATE SET snapshot = EXCLUDED.snapshot, updated_at = NOW()',
+    [code, JSON.stringify(snapshot)]
+  ));
+  saveQueues.set(code, current);
+  try { await current; } finally { if (saveQueues.get(code) === current) saveQueues.delete(code); }
+}
+function createRoomState(snapshot) {
+  const r = { players: new Map(), inventory: { wood: 0, food: 0, water: 0 }, collected: new Set(), farm: freshFarm(), livestock: freshLivestock(), buildings: freshBuildings(), lastFarmAction: new Map(), lastAnimalAction: new Map(), lastBuildingAction: new Map(), lastMarketAction: new Map() };
+  if (snapshot && typeof snapshot === 'object') {
+    if (snapshot.inventory && ['wood','food','water'].every(k => Number.isSafeInteger(snapshot.inventory[k]) && snapshot.inventory[k] >= 0 && snapshot.inventory[k] <= 1000000)) r.inventory = { wood: snapshot.inventory.wood, food: snapshot.inventory.food, water: snapshot.inventory.water };
+    if (Array.isArray(snapshot.collected) && snapshot.collected.length <= 101) r.collected = new Set(snapshot.collected.filter(n => Number.isInteger(n) && n >= 0 && n <= 100));
+    if (snapshot.farm && Number.isSafeInteger(snapshot.farm.coins) && snapshot.farm.coins >= 0 && snapshot.farm.coins <= 100000000 && Number.isSafeInteger(snapshot.farm.seeds) && snapshot.farm.seeds >= 0 && snapshot.farm.seeds <= 1000000 && Number.isSafeInteger(snapshot.farm.produce) && snapshot.farm.produce >= 0 && snapshot.farm.produce <= 1000000 && Array.isArray(snapshot.farm.crops) && snapshot.farm.crops.length === FARM_PLOTS.length && snapshot.farm.crops.every(c => c && Number.isFinite(c.plantedAt) && c.plantedAt >= 0 && typeof c.watered === 'boolean' && Number.isFinite(c.readyAt) && c.readyAt >= 0)) r.farm = snapshot.farm;
+    if (snapshot.livestock && Array.isArray(snapshot.livestock.stalls) && snapshot.livestock.stalls.length === ANIMAL_STALLS.length && snapshot.livestock.stalls.every(a => a && ['', 'chicken','goat','cow'].includes(a.type) && Number.isFinite(a.fedAt) && a.fedAt >= 0 && Number.isFinite(a.readyAt) && a.readyAt >= 0) && ['feed','eggs','milk','goatMilk'].every(k => Number.isSafeInteger(snapshot.livestock[k]) && snapshot.livestock[k] >= 0 && snapshot.livestock[k] <= 1000000)) r.livestock = snapshot.livestock;
+    if (snapshot.buildings && Array.isArray(snapshot.buildings.sites) && snapshot.buildings.sites.length === BUILD_SITES.length && snapshot.buildings.sites.every(h => h && typeof h.built === 'boolean' && Array.isArray(h.furniture) && h.furniture.length <= 4 && h.furniture.every(f => f && FURNITURE_TYPES.has(f.type) && Number.isInteger(f.slot) && f.slot >= 0 && f.slot <= 3))) r.buildings = snapshot.buildings;
+  }
+  return r;
+}
+async function loadRoom(code) {
+  if (rooms.has(code)) return rooms.get(code);
+  if (!pool || !databaseReady) return null;
+  const result = await pool.query('SELECT snapshot FROM rannabati_room_saves WHERE room_code = $1', [code]);
+  if (!result.rows.length) return null;
+  const room = createRoomState(result.rows[0].snapshot); rooms.set(code, room); return room;
+}
 const MAX_PLAYERS = 2;
 const WORLD_LIMIT = 31;
 // Shared day/night cycle: one complete village day every 8 real minutes.
 function worldClock() { return { epoch: Date.now(), dayLengthMs: 480000 }; }
 
-app.get('/', (_req, res) => res.json({ name: 'Rannabati Village multiplayer server', status: 'ok', rooms: rooms.size }));
-app.get('/health', (_req, res) => res.status(200).json({ status: 'ok', rooms: rooms.size }));
+app.get('/', (_req, res) => res.json({ name: 'Rannabati Village multiplayer server', status: 'ok', database: databaseReady ? 'connected' : (pool ? 'starting/unavailable' : 'not-configured'), rooms: rooms.size }));
+app.get('/health', (_req, res) => res.status(pool && !databaseReady ? 503 : 200).json({ status: pool && !databaseReady ? 'degraded' : 'ok', database: databaseReady, rooms: rooms.size }));
 app.get('/socket.io-health', (_req, res) => res.json({ status: 'ok', socketIo: true, version: require('socket.io/package.json').version }));
 
 function makeCode() {
@@ -103,10 +142,11 @@ function emitRoomSnapshot(socket, room) {
 io.on('connection', socket => {
   socket.data.room = null;
 
-  socket.on('createRoom', () => {
+  socket.on('createRoom', async () => {
     leaveCurrentRoom(socket);
     const room = makeCode();
-    rooms.set(room, { players: new Map(), inventory: { wood: 0, food: 0, water: 0 }, collected: new Set(), farm: freshFarm(), livestock: freshLivestock(), buildings: freshBuildings(), lastFarmAction: new Map(), lastAnimalAction: new Map(), lastBuildingAction: new Map(), lastMarketAction: new Map() });
+    rooms.set(room, createRoomState(null));
+    await persistRoom(room).catch(err => console.error('Initial room save failed:', err.message));
     const r = rooms.get(room);
     r.players.set(socket.id, { id: socket.id, x: 0, z: 0, rotation: 0 });
     socket.data.room = room;
@@ -116,11 +156,12 @@ io.on('connection', socket => {
     emitRoomSnapshot(socket, room);
   });
 
-  socket.on('joinRoom', rawCode => {
+  socket.on('joinRoom', async rawCode => {
     const room = String(rawCode || '').trim().toUpperCase();
     if (!/^[A-HJ-NP-Z2-9]{5}$/.test(room)) return socket.emit('roomError', 'Enter a valid 5-character room code.');
-    const r = rooms.get(room);
-    if (!r) return socket.emit('roomError', 'Room not found. Ask your friend to create a room again. Rooms reset when the server restarts.');
+    let r;
+    try { r = rooms.get(room) || await loadRoom(room); } catch (err) { console.error('Room restore failed:', err.message); return socket.emit('roomError', 'Could not restore this village. Please try again shortly.'); }
+    if (!r) return socket.emit('roomError', 'Room not found. Ask your friend to create a room first.');
     if (socket.data.room === room && r.players.has(socket.id)) {
       socket.emit('roomJoined', { room, players: [...r.players.values()].map(publicPlayer) });
       socket.emit('worldClock', worldClock());
@@ -153,7 +194,7 @@ io.on('connection', socket => {
     socket.to(room).volatile.emit('playerMoved', publicPlayer(p));
   });
 
-  socket.on('gameAction', payload => {
+  socket.on('gameAction', async payload => {
     const room = socket.data.room;
     if (!room || !payload || payload.room !== room || typeof payload.action !== 'string') return;
     const r = rooms.get(room);
@@ -165,17 +206,20 @@ io.on('connection', socket => {
       if (r.collected.has(index)) return;
       r.collected.add(index);
       r.inventory[type] += 1;
+      persistRoom(room).catch(err => console.error('Save failed:', err.message));
     } else if (action === 'cooked') {
       if (r.inventory.food < 1 || r.inventory.wood < 1) return;
       r.inventory.food -= 1;
       r.inventory.wood -= 1;
+      persistRoom(room).catch(err => console.error('Save failed:', err.message));
     } else if (!['sleep', 'wave'].includes(action)) return;
+    await persistRoom(room).catch(err => console.error('Save failed:', err.message));
     socket.to(room).emit('gameAction', { action, data });
     io.to(room).emit('state', roomState(room));
   });
 
   // V3C: all shared farm mutations are validated and committed on the server.
-  socket.on('farmAction', payload => {
+  socket.on('farmAction', async payload => {
     const room = socket.data.room;
     if (!room || !payload || payload.room !== room || typeof payload.action !== 'string') return;
     const r = rooms.get(room), player = r && r.players.get(socket.id);
@@ -213,6 +257,7 @@ io.on('connection', socket => {
       if (r.farm.produce < 1) return fail('Harvest a crop before selling.');
       const sold = r.farm.produce; r.farm.produce = 0; r.farm.coins += sold * 10;
     } else return fail('Unknown farm action.');
+    await persistRoom(room).catch(err => console.error('Save failed:', err.message));
     const farm = publicFarm(r.farm);
     io.to(room).emit('farmState', farm);
     io.to(room).emit('state', roomState(room));
@@ -220,7 +265,7 @@ io.on('connection', socket => {
   });
 
   // V3D: server-authoritative shared livestock, feeding, production and sales.
-  socket.on('animalAction', payload => {
+  socket.on('animalAction', async payload => {
     const room = socket.data.room;
     if (!room || !payload || payload.room !== room || typeof payload.action !== 'string') return;
     const r = rooms.get(room), player = r && r.players.get(socket.id);
@@ -265,6 +310,7 @@ io.on('connection', socket => {
       r.livestock.eggs = 0; r.livestock.milk = 0; r.livestock.goatMilk = 0;
       r.farm.coins += count * 8;
     } else return fail('Unknown animal action.');
+    await persistRoom(room).catch(err => console.error('Save failed:', err.message));
     const farm = publicFarm(r.farm), livestock = publicLivestock(r.livestock, r.farm);
     io.to(room).emit('farmState', farm);
     io.to(room).emit('livestockState', livestock);
@@ -274,7 +320,7 @@ io.on('connection', socket => {
   });
 
   // V3E: house and furniture transactions are authoritative on the server.
-  socket.on('buildingAction', payload => {
+  socket.on('buildingAction', async payload => {
     const room = socket.data.room;
     if (!room || !payload || payload.room !== room || typeof payload.action !== 'string') return;
     const r = rooms.get(room), player = r && r.players.get(socket.id);
@@ -307,6 +353,7 @@ io.on('connection', socket => {
       r.inventory.wood -= FURNITURE_WOOD_COST; r.farm.coins -= FURNITURE_COIN_COST;
       house.furniture.push({ type, slot });
     } else return fail('Unknown building action.');
+    await persistRoom(room).catch(err => console.error('Save failed:', err.message));
     const buildings = publicBuildings(r.buildings), farm = publicFarm(r.farm);
     io.to(room).emit('buildingsState', buildings);
     io.to(room).emit('farmState', farm);
@@ -315,7 +362,7 @@ io.on('connection', socket => {
   });
 
   // V3F: secure shared market transactions. Prices, quantities and stock are server-controlled.
-  socket.on('marketAction', payload => {
+  socket.on('marketAction', async payload => {
     const room = socket.data.room;
     if (!room || !payload || payload.room !== room || typeof payload.action !== 'string') return;
     const r = rooms.get(room), player = r && r.players.get(socket.id);
@@ -345,6 +392,7 @@ io.on('connection', socket => {
       else if (action === 'sellGoatMilk') { tradedCount = r.livestock.goatMilk; if (tradedCount < 1) return fail('Collect goat milk before selling.'); r.livestock.goatMilk = 0; }
       r.farm.coins += tradedCount * MARKET_SELL_PRICES[action];
     } else return fail('Unknown market transaction.');
+    await persistRoom(room).catch(err => console.error('Save failed:', err.message));
     const state = { inventory: { ...r.inventory }, farm: publicFarm(r.farm), livestock: publicLivestock(r.livestock, r.farm) };
     io.to(room).emit('state', roomState(room));
     io.to(room).emit('farmState', state.farm);
@@ -356,4 +404,6 @@ io.on('connection', socket => {
 });
 setInterval(() => { for (const room of rooms.keys()) { io.to(room).emit('worldClock', worldClock()); const r = rooms.get(room); if (r && r.farm) io.to(room).emit('farmState', publicFarm(r.farm)); if (r && r.livestock) io.to(room).emit('livestockState', publicLivestock(r.livestock, r.farm)); if (r && r.buildings) io.to(room).emit('buildingsState', publicBuildings(r.buildings)); } }, 5000);
 
-server.listen(PORT, '0.0.0.0', () => console.log(`Rannabati server listening on ${PORT}`));
+initDatabase().then(() => {
+  server.listen(PORT, '0.0.0.0', () => console.log(`Rannabati server listening on ${PORT}`));
+}).catch(err => { console.error('Database initialization failed:', err); process.exit(1); });

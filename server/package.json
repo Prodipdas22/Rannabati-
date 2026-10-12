@@ -1,13 +1,14 @@
 {
   "name": "rannabati-village-server",
-  "version": "1.0.0",
+  "version": "3.8.0",
   "private": true,
-  "description": "Realtime two-player room server for Rannabati Village",
+  "description": "Rannabati Village Socket.IO multiplayer backend with PostgreSQL persistence",
   "main": "server.js",
   "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
   "dependencies": {
     "express": "^4.21.2",
+    "pg": "^8.13.1",
     "socket.io": "^4.8.1"
-  },
-  "engines": { "node": ">=18" }
+  }
 }
