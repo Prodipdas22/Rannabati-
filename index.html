@@ -11,6 +11,27 @@
 <body>
   <main id="game" aria-label="Rannabati Village 3D game"></main>
 
+  <div id="startScreen" class="start-screen" aria-live="polite">
+    <div class="start-card">
+      <div class="start-pill">🌾 Village adventure</div>
+      <h1>Rannabati</h1>
+      <p>Build your cozy village, gather resources, grow food, care for animals, and play together with friends in a peaceful mobile life sim.</p>
+      <div class="feature-grid">
+        <div class="feature-item"><strong>🌱</strong><span>Farm & grow</span></div>
+        <div class="feature-item"><strong>🏡</strong><span>Build homes</span></div>
+        <div class="feature-item"><strong>🤝</strong><span>Play together</span></div>
+      </div>
+      <div class="start-actions">
+        <button id="startGameBtn" type="button">Start adventure</button>
+        <button id="showTutorialBtn" class="secondary ghost" type="button">How to play</button>
+      </div>
+      <div class="divider"></div>
+      <div class="start-hint">
+        <strong>Quick start:</strong> move with the joystick, collect nearby resources, cook a meal, keep hunger and thirst up, and join a room to play with a friend.
+      </div>
+    </div>
+  </div>
+
   <header class="top-hud">
     <div class="brand" aria-label="Rannabati Village homepage">
       <span class="brand-mark">🏡</span>
@@ -80,7 +101,6 @@
   <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
   <script type="module" src="./game.js"></script>
   <script>
-    // Mirror the top HUD meters into the compact survival panel.
     const mirror = () => {
       for (const key of ["hunger","thirst","energy"]) {
         const src = document.getElementById(key + "Value");
